@@ -10,10 +10,14 @@
 #include <utility>
 #include <tuple>
 #include <cstdlib>
+#include <integer_sequence.h>
 
-namespace std {
+namespace cpp17 {
 
-inline namespace Cpp17 {
+using namespace std;
+using namespace cpp14;
+
+template <class T> using decay_t = typename decay<T>::type;
 
 template <class...> struct void_t_imp { typedef void type; };
 template <class... T> using void_t = typename void_t_imp<T...>::type;
@@ -21,7 +25,9 @@ template <class... T> using void_t = typename void_t_imp<T...>::type;
 namespace internal {
 
 template <class F, class Tuple, size_t... I>
-constexpr auto apply_impl(F&& f, Tuple&& t, std::index_sequence<I...>) {
+constexpr auto apply_impl(F&& f, Tuple&& t, index_sequence<I...>) ->
+    decltype(std::forward<F>(f)(std::get<I>(std::forward<Tuple>(t))...))
+{
     // TBD: This should be a call to `invoke()`
     return std::forward<F>(f)(std::get<I>(std::forward<Tuple>(t))...);
 }
@@ -41,10 +47,13 @@ T* uninitialized_construct_from_tuple_imp(T* p, Tuple&& t,
 }
 #endif
 
-} // close namespace namespace Cpp20::internal
+} // close namespace namespace cpp17::internal
 
 template <class F, class Tuple>
-constexpr decltype(auto) apply(F&& f, Tuple&& t) {
+constexpr auto apply(F&& f, Tuple&& t) ->
+    decltype(internal::apply_impl(std::forward<F>(f), std::forward<Tuple>(t),
+                      make_index_sequence<tuple_size<decay_t<Tuple>>::value>{}))
+{
     return internal::apply_impl(std::forward<F>(f), std::forward<Tuple>(t),
                     make_index_sequence<tuple_size<decay_t<Tuple>>::value>{});
 }
@@ -69,7 +78,6 @@ T* uninitialized_construct_from_tuple(T* p, Tuple&& args_tuple)
 }
 #endif
 
-} // close namespace Cpp17
-} // close namespace std
+} // close namespace cpp17
 
 #endif // ! defined(INCLUDED_MAKE_FROM_TUPLE_DOT_H)

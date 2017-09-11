@@ -1,7 +1,9 @@
-/* uses_allocator.h                  -*-C++-*-
+/* polymorphic_allocator.h                  -*-C++-*-
  *
- * Copyright (C) 2016 Pablo Halpern <phalpern@halpernwightsoftware.com>
- * Distributed under the Boost Software License - Version 1.0
+ *            Copyright 2016 Pablo Halpern.
+ * Distributed under the Boost Software License, Version 1.0.
+ *    (See accompanying file LICENSE_1_0.txt or copy at
+ *          http://www.boost.org/LICENSE_1_0.txt)
  */
 
 #ifndef INCLUDED_USES_ALLOCATOR_DOT_H
@@ -11,9 +13,13 @@
 #include <utility>
 #include <memory>
 
+namespace cpp17 {
+    using namespace std;
+}
+
 namespace cpp20 {
 
-using namespace std;
+using namespace cpp17;
 
 ////////////////////////////////////////////////////////////////////////
 

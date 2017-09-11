@@ -1,6 +1,6 @@
 /* polymorphic_allocator.h                  -*-C++-*-
  *
- *            Copyright 2012 Pablo Halpern.
+ *            Copyright 2016 Pablo Halpern.
  * Distributed under the Boost Software License, Version 1.0.
  *    (See accompanying file LICENSE_1_0.txt or copy at
  *          http://www.boost.org/LICENSE_1_0.txt)
@@ -13,7 +13,8 @@
 #include <memory>
 #include <stdlib.h>
 #include <new>
-#include <uses_allocator.h>
+#include <scoped_allocator>
+//#include <uses_allocator.h>
 
 namespace cpp17 {
 
@@ -116,60 +117,40 @@ memory_resource *get_default_resource();
 // Set the default resource
 memory_resource *set_default_resource(memory_resource *r);
 
+namespace __details {
+
 // STL allocator that holds a pointer to a polymorphic allocator resource.
+// Used to implement `polymorphic_allocator`, which is a scoped allocator.
 template <class Tp>
-class polymorphic_allocator
+class polymorphic_allocator_imp
 {
     memory_resource* m_resource;
 
   public:
     typedef Tp value_type;
 
-    // g++-4.6.3 does not use allocator_traits in shared_ptr, so we have to
-    // provide an explicit rebind.
-    template <typename U>
-    struct rebind { typedef polymorphic_allocator<U> other; };
-
-    polymorphic_allocator();
-    polymorphic_allocator(memory_resource *r);
+    polymorphic_allocator_imp();
+    polymorphic_allocator_imp(memory_resource *r);
 
     template <class U>
-    polymorphic_allocator(const polymorphic_allocator<U>& other);
+    polymorphic_allocator_imp(const polymorphic_allocator_imp<U>& other);
 
     Tp *allocate(size_t n);
     void deallocate(Tp *p, size_t n);
 
-    template <typename T, typename... Args>
-      void construct(T* p, Args&&... args);
-
-    // Specializations for pair using piecewise constructionw
-    template <class T1, class T2>
-      void construct(std::pair<T1,T2>* p);
-    template <class T1, class T2, class U, class V>
-      void construct(std::pair<T1,T2>* p, U&& x, V&& y);
-    template <class T1, class T2, class U, class V>
-      void construct(std::pair<T1,T2>* p, const std::pair<U, V>& pr);
-    template <class T1, class T2, class U, class V>
-      void construct(std::pair<T1,T2>* p, std::pair<U, V>&& pr);
-
-    template <typename T>
-      void destroy(T* p);
-
     // Return a default-constructed allocator
-    polymorphic_allocator select_on_container_copy_construction() const;
+    polymorphic_allocator_imp select_on_container_copy_construction() const;
 
     memory_resource *resource() const;
 };
 
 template <class T1, class T2>
-bool operator==(const polymorphic_allocator<T1>& a,
-                const polymorphic_allocator<T2>& b);
+bool operator==(const polymorphic_allocator_imp<T1>& a,
+                const polymorphic_allocator_imp<T2>& b);
 
 template <class T1, class T2>
-bool operator!=(const polymorphic_allocator<T1>& a,
-                const polymorphic_allocator<T2>& b);
-
-namespace __details {
+bool operator!=(const polymorphic_allocator_imp<T1>& a,
+                const polymorphic_allocator_imp<T2>& b);
 
 template <size_t Align> struct aligned_chunk;
 
@@ -181,21 +162,64 @@ template <> struct aligned_chunk<16> { __attribute__((aligned(16))) char x; };
 template <> struct aligned_chunk<32> { __attribute__((aligned(32))) char x; };
 template <> struct aligned_chunk<64> { __attribute__((aligned(64))) char x; };
 
-template <typename Tp>
-struct calc_alignment
-{
-    char a;
-    Tp   x;
-public:
-    calc_alignment();
-    calc_alignment(const calc_alignment&);
-    ~calc_alignment();
-};
+// template <typename Tp>
+// struct calc_alignment
+// {
+//     char a;
+//     Tp   x;
+// public:
+//     calc_alignment();
+//     calc_alignment(const calc_alignment&);
+//     ~calc_alignment();
+// };
 
-#define alignof(T) \
-    (sizeof(cpp17::pmr::__details::calc_alignment<T>) - sizeof(T))
+/* #define alignof(T)                                                   \
+     (sizeof(cpp17::pmr::__details::calc_alignment<T>) - sizeof(T))
+*/
 
 } // end namespace __details
+
+template <class Tp>
+class polymorphic_allocator :
+    public scoped_allocator_adaptor<__details::polymorphic_allocator_imp<Tp>>
+{
+    typedef __details::polymorphic_allocator_imp<Tp> Imp;
+    typedef scoped_allocator_adaptor<Imp>            Base;
+
+  public:
+    // g++-4.6.3 does not use allocator_traits in shared_ptr, so we have to
+    // provide an explicit rebind.
+    template <typename U>
+    struct rebind { typedef polymorphic_allocator<U> other; };
+
+    polymorphic_allocator() = default;
+    polymorphic_allocator(memory_resource *r) : Base(Imp(r)) { }
+
+    template <class U>
+    polymorphic_allocator(const polymorphic_allocator<U>& other)
+        : Base(Imp((other.resource()))) { }
+
+    template <class U>
+    polymorphic_allocator(const __details::polymorphic_allocator_imp<U>& other)
+        : Base(other) { }
+
+    // Return a default-constructed allocator
+    polymorphic_allocator select_on_container_copy_construction() const
+        { return polymorphic_allocator(); }
+
+    memory_resource *resource() const
+        { return this->outer_allocator().resource(); }
+};
+
+template <class T1, class T2>
+inline bool operator==(const polymorphic_allocator<T1>& a,
+                       const polymorphic_allocator<T2>& b)
+    { return a.outer_allocator() == b.outer_allocator(); }
+
+template <class T1, class T2>
+inline bool operator!=(const polymorphic_allocator<T1>& a,
+                       const polymorphic_allocator<T2>& b)
+    { return ! (a == b); }
 
 } // end namespace pmr
 
@@ -356,16 +380,18 @@ bool pmr::resource_adaptor_imp<Allocator>::is_equal(
 }
 
 
+namespace __pmrd = pmr::__details;
+
 template <class Tp>
 inline
-pmr::polymorphic_allocator<Tp>::polymorphic_allocator()
+__pmrd::polymorphic_allocator_imp<Tp>::polymorphic_allocator_imp()
     : m_resource(get_default_resource())
 {
 }
 
 template <class Tp>
 inline
-pmr::polymorphic_allocator<Tp>::polymorphic_allocator(
+__pmrd::polymorphic_allocator_imp<Tp>::polymorphic_allocator_imp(
     pmr::memory_resource *r)
     : m_resource(r ? r : get_default_resource())
 {
@@ -374,126 +400,47 @@ pmr::polymorphic_allocator<Tp>::polymorphic_allocator(
 template <class Tp>
     template <class U>
 inline
-pmr::polymorphic_allocator<Tp>::polymorphic_allocator(
-    const pmr::polymorphic_allocator<U>& other)
+__pmrd::polymorphic_allocator_imp<Tp>::polymorphic_allocator_imp(
+    const __pmrd::polymorphic_allocator_imp<U>& other)
     : m_resource(other.resource())
 {
 }
 
 template <class Tp>
 inline
-Tp *pmr::polymorphic_allocator<Tp>::allocate(size_t n)
+Tp *__pmrd::polymorphic_allocator_imp<Tp>::allocate(size_t n)
 {
     return static_cast<Tp*>(m_resource->allocate(n * sizeof(Tp), alignof(Tp)));
 }
 
 template <class Tp>
 inline
-void pmr::polymorphic_allocator<Tp>::deallocate(Tp *p, size_t n)
+void __pmrd::polymorphic_allocator_imp<Tp>::deallocate(Tp *p, size_t n)
 {
     m_resource->deallocate(p, n * sizeof(Tp), alignof(Tp));
 }
 
 template <class Tp>
-template <typename T, typename... Args>
-void pmr::polymorphic_allocator<Tp>::construct(T* p, Args&&... args)
-{
-    cpp20::uninitialized_construct_using_allocator(p, *this,
-                                                   std::forward<Args>(args)...);
-}
-
-// Specializations to pass inner_allocator to pair::first and pair::second
-template <class Tp>
-template <class T1, class T2>
-void pmr::polymorphic_allocator<Tp>::construct(std::pair<T1,T2>* p)
-{
-    // TBD: Should really use piecewise construction here
-    construct(addressof(p->first));
-    try {
-        construct(addressof(p->second));
-    }
-    catch (...) {
-        destroy(addressof(p->first));
-        throw;
-    }
-}
-
-template <class Tp>
-template <class T1, class T2, class U, class V>
-void pmr::polymorphic_allocator<Tp>::construct(std::pair<T1,T2>* p,
-                                                     U&& x, V&& y)
-{
-    // TBD: Should really use piecewise construction here
-    construct(addressof(p->first), std::forward<U>(x));
-    try {
-        construct(addressof(p->second), std::forward<V>(y));
-    }
-    catch (...) {
-        destroy(addressof(p->first));
-        throw;
-    }
-}
-
-template <class Tp>
-template <class T1, class T2, class U, class V>
-void pmr::polymorphic_allocator<Tp>::construct(std::pair<T1,T2>* p,
-                                                     const std::pair<U, V>& pr)
-{
-    // TBD: Should really use piecewise construction here
-    construct(addressof(p->first), pr.first);
-    try {
-        construct(addressof(p->second), pr.second);
-    }
-    catch (...) {
-        destroy(addressof(p->first));
-        throw;
-    }
-}
-
-template <class Tp>
-template <class T1, class T2, class U, class V>
-void pmr::polymorphic_allocator<Tp>::construct(std::pair<T1,T2>* p,
-                                                     std::pair<U, V>&& pr)
-{
-    // TBD: Should really use piecewise construction here
-    construct(addressof(p->first), std::move(pr.first));
-    try {
-        construct(addressof(p->second), std::move(pr.second));
-    }
-    catch (...) {
-        destroy(addressof(p->first));
-        throw;
-    }
-}
-
-template <class Tp>
-template <typename T>
-void pmr::polymorphic_allocator<Tp>::destroy(T* p)
-{
-    p->~T();
-}
-
-template <class Tp>
 inline
-pmr::polymorphic_allocator<Tp>
-pmr::polymorphic_allocator<Tp>::select_on_container_copy_construction()
+__pmrd::polymorphic_allocator_imp<Tp>
+__pmrd::polymorphic_allocator_imp<Tp>::select_on_container_copy_construction()
     const
 {
-    return pmr::polymorphic_allocator<Tp>();
+    return __pmrd::polymorphic_allocator_imp<Tp>();
 }
 
 template <class Tp>
 inline
 pmr::memory_resource *
-pmr::polymorphic_allocator<Tp>::resource() const
+__pmrd::polymorphic_allocator_imp<Tp>::resource() const
 {
     return m_resource;
 }
 
 template <class T1, class T2>
 inline
-bool pmr::operator==(const pmr::polymorphic_allocator<T1>& a,
-                           const pmr::polymorphic_allocator<T2>& b)
+bool __pmrd::operator==(const __pmrd::polymorphic_allocator_imp<T1>& a,
+                        const __pmrd::polymorphic_allocator_imp<T2>& b)
 {
     // 'operator==' for 'memory_resource' first checks for equality of
     // addresses and calls 'is_equal' only if the addresses differ.  The call
@@ -506,8 +453,8 @@ bool pmr::operator==(const pmr::polymorphic_allocator<T1>& a,
 
 template <class T1, class T2>
 inline
-bool pmr::operator!=(const pmr::polymorphic_allocator<T1>& a,
-                     const pmr::polymorphic_allocator<T2>& b)
+bool __pmrd::operator!=(const __pmrd::polymorphic_allocator_imp<T1>& a,
+                        const __pmrd::polymorphic_allocator_imp<T2>& b)
 {
     return *a.resource() != *b.resource();
 }
