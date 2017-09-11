@@ -578,7 +578,7 @@ int main(int argc, char *argv[])
     else
         std::cout << " all cases" << std::endl;
 
-#define PMR cpp17::pmr::polymorphic_allocator
+#define PMA cpp17::pmr::polymorphic_allocator
 
     switch (test) { case 0: // Do all cases for test-case 0
       case 1:
@@ -614,23 +614,23 @@ int main(int argc, char *argv[])
         {
             // Test construction with resource
             TestResource ar;
-            const PMR<double> a1(&ar);
+            const PMA<double> a1(&ar);
             ASSERT(a1.resource() == &ar);
 
             // Test conversion constructor
-            PMR<char> a2(a1);
+            PMA<char> a2(a1);
             ASSERT(a2.resource() == &ar);
 
             // Test default construction
-            PMR<char> a3;
+            PMA<char> a3;
             ASSERT(a3.resource() == &dfltTestRsrc);
 
             // Test construction with null pointer
-            PMR<char> a4(nullptr);
+            PMA<char> a4(nullptr);
             ASSERT(a4.resource() == &dfltTestRsrc);
 
             // Test copy constructoin
-            PMR<char> a5(a2);
+            PMA<char> a5(a2);
             ASSERT(a5.resource() == &ar);
         }
 
@@ -641,7 +641,7 @@ int main(int argc, char *argv[])
 
         // Simple use of vector with polymorphic allocator
         {
-            typedef PMR<int> Alloc;
+            typedef PMA<int> Alloc;
 
             SimpleVector<int, Alloc> vx(&x);
             ASSERT(1 == xc.blocks_outstanding());
@@ -660,7 +660,7 @@ int main(int argc, char *argv[])
         // Outer allocator is polymorphic, inner is not.
         {
             typedef SimpleString<SimpleAllocator<char> > String;
-            typedef PMR<String> Alloc;
+            typedef PMA<String> Alloc;
 
             SimpleVector<String, Alloc> vx(&x);
             ASSERT(1 == xc.blocks_outstanding());
@@ -687,7 +687,7 @@ int main(int argc, char *argv[])
 
         // Inner allocator is polymorphic, outer is not.
         {
-            typedef SimpleString<PMR<char> > String;
+            typedef SimpleString<PMA<char> > String;
             typedef SimpleAllocator<String> Alloc;
 
             SimpleVector<String, Alloc> vx(&xc);
@@ -716,8 +716,8 @@ int main(int argc, char *argv[])
 
         // Both outer and inner allocators are polymorphic.
         {
-            typedef SimpleString<PMR<char> > String;
-            typedef PMR<String> Alloc;
+            typedef SimpleString<PMA<char> > String;
+            typedef PMA<String> Alloc;
 
             SimpleVector<String, Alloc> vx(&x);
             ASSERT(1 == xc.blocks_outstanding());
@@ -744,8 +744,8 @@ int main(int argc, char *argv[])
 
         // Test container copy construction
         {
-            typedef SimpleString<PMR<char> > String;
-            typedef PMR<String> Alloc;
+            typedef SimpleString<PMA<char> > String;
+            typedef PMA<String> Alloc;
 
             SimpleVector<String, Alloc> vx(&x);
             ASSERT(1 == xc.blocks_outstanding());
@@ -785,14 +785,14 @@ int main(int argc, char *argv[])
 
         // Test resource_adaptor
         {
-            typedef SimpleString<PMR<char> > String;
-            typedef SimpleVector<String, PMR<String> > strvec;
-            typedef SimpleVector<strvec, PMR<strvec> > strvecvec;
+            typedef SimpleString<PMA<char> > String;
+            typedef SimpleVector<String, PMA<String> > strvec;
+            typedef SimpleVector<strvec, PMA<strvec> > strvecvec;
 
             SimpleAllocator<char> sax(&xc);
             SimpleAllocator<char> say(&yc);
-            PMR_RESOURCE_ADAPTOR(SimpleAllocator<char>) crx(sax);
-            PMR_RESOURCE_ADAPTOR(SimpleAllocator<char>) cry(say);
+            resource_adaptor<SimpleAllocator<char>> crx(sax);
+            resource_adaptor<SimpleAllocator<char>> cry(say);
 
             strvec    a(&crx);
             strvecvec b(&cry);
@@ -846,9 +846,9 @@ int main(int argc, char *argv[])
 
         // Test construct() using pairs
         {
-            typedef SimpleString<PMR<char> > String;
+            typedef SimpleString<PMA<char> > String;
             typedef std::pair<String, int> StrInt;
-            typedef PMR<StrInt> Alloc;
+            typedef PMA<StrInt> Alloc;
 
             SimpleVector<StrInt, SimpleAllocator<StrInt> > vx(&xc);
             SimpleVector<StrInt, Alloc> vy(&y);

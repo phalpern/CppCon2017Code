@@ -11,20 +11,23 @@
 
 #include <atomic>
 #include <memory>
-#include <stdlib.h>
 #include <new>
 #include <scoped_allocator>
-//#include <uses_allocator.h>
+#include <cstddef>  // For max_align_t
 
 namespace cpp17 {
 
 using namespace std;
 
-typedef double max_align_t;
+// The `byte` type is defined exactly this way in C++17's `<cstddef>` (section
+// [cstddef.syn]).  It is defined here to allow use of
+// `polymorphic_allocator<byte>` as a vocabulary type.
+enum class byte : unsigned char {};
 
 namespace pmr {
 
 // Abstract base class for allocator resources.
+// Conforms to the C++17 standard, section [mem.res.class].
 class memory_resource
 {
     static atomic<memory_resource *> s_default_resource;
@@ -37,7 +40,7 @@ class memory_resource
     virtual void* allocate(size_t bytes, size_t alignment = 0) = 0;
     virtual void  deallocate(void *p, size_t bytes, size_t alignment = 0) = 0;
 
-    // 'is_equal' is needed because polymorphic allocators are sometimes
+    // `is_equal` is needed because polymorphic allocators are sometimes
     // produced as a result of type erasure.  In that case, two different
     // instances of a polymorphic_memory_resource may actually represent
     // the same underlying allocator and should compare equal, even though
@@ -48,10 +51,10 @@ class memory_resource
 inline
 bool operator==(const memory_resource& a, const memory_resource& b)
 {
-    // The call 'is_equal' because some polymorphic allocators are produced as
-    // a result of type erasure.  In that case, 'a' and 'b' may contain
-    // 'memory_resource's with different addresses which, nevertheless,
-    // should compare equal.
+    // Call `is_equal` rather than using address comparisons because some
+    // polymorphic allocators are produced as a result of type erasure.  In
+    // that case, `a` and `b` may contain `memory_resource`s with different
+    // addresses which, nevertheless, should compare equal.
     return &a == &b || a.is_equal(b);
 }
 
@@ -60,62 +63,6 @@ bool operator!=(const memory_resource& a, const memory_resource& b)
 {
     return ! (a == b);
 }
-
-// Adaptor make a polymorphic allocator resource type from an STL allocator
-// type.
-template <class Allocator>
-class resource_adaptor_imp : public memory_resource
-{
-    typename allocator_traits<Allocator>::
-        template rebind_alloc<max_align_t> m_alloc;
-
-    template <size_t Align>
-    void *do_allocate(size_t bytes);
-
-    template <size_t Align>
-    void do_deallocate(void *p, size_t bytes);
-
-  public:
-    typedef Allocator allocator_type;
-
-    resource_adaptor_imp() = default;
-
-    resource_adaptor_imp(const resource_adaptor_imp&) = default;
-
-    template <class Allocator2>
-    resource_adaptor_imp(Allocator2&& a2, typename
-                         enable_if<is_convertible<Allocator2, Allocator>::value,
-                                   int>::type = 0);
-
-    virtual void *allocate(size_t bytes, size_t alignment = 0);
-    virtual void deallocate(void *p, size_t bytes, size_t alignment = 0);
-
-    virtual bool is_equal(const memory_resource& other) const;
-
-    allocator_type get_allocator() const { return m_alloc; }
-};
-
-// This alias ensures that 'resource_adaptor<T>' and
-// 'resource_adaptor<U>' are always the same type, whether or not
-// 'T' and 'U' are the same type.
-template <class Allocator>
-using resource_adaptor = resource_adaptor_imp<
-    typename allocator_traits<Allocator>::template rebind_alloc<char>>;
-#define PMR_RESOURCE_ADAPTOR(Alloc) \
-    cpp17::pmr::resource_adaptor<Alloc >
-
-// An allocator resource that uses '::operator new' and '::operator delete' to
-// manage memory is created by adapting 'std::allocator':
-typedef PMR_RESOURCE_ADAPTOR(std::allocator<char>) new_delete_resource;
-
-// Return a pointer to a global instance of 'new_delete_resource'.
-new_delete_resource *new_delete_resource_singleton();
-
-// Get the current default resource
-memory_resource *get_default_resource();
-
-// Set the default resource
-memory_resource *set_default_resource(memory_resource *r);
 
 namespace __details {
 
@@ -162,22 +109,64 @@ template <> struct aligned_chunk<16> { __attribute__((aligned(16))) char x; };
 template <> struct aligned_chunk<32> { __attribute__((aligned(32))) char x; };
 template <> struct aligned_chunk<64> { __attribute__((aligned(64))) char x; };
 
-// template <typename Tp>
-// struct calc_alignment
-// {
-//     char a;
-//     Tp   x;
-// public:
-//     calc_alignment();
-//     calc_alignment(const calc_alignment&);
-//     ~calc_alignment();
-// };
+// Adaptor to make a polymorphic allocator resource type from an STL allocator
+// type.  This is really a C++20 feature, but it's useful for implementing
+// this component.
+template <class Allocator>
+class resource_adaptor_imp : public memory_resource
+{
+    typename allocator_traits<Allocator>::
+        template rebind_alloc<max_align_t> m_alloc;
 
-/* #define alignof(T)                                                   \
-     (sizeof(cpp17::pmr::__details::calc_alignment<T>) - sizeof(T))
-*/
+    template <size_t Align>
+    void *do_allocate(size_t bytes);
+
+    template <size_t Align>
+    void do_deallocate(void *p, size_t bytes);
+
+  public:
+    typedef Allocator allocator_type;
+
+    resource_adaptor_imp() = default;
+
+    resource_adaptor_imp(const resource_adaptor_imp&) = default;
+
+    template <class Allocator2>
+    resource_adaptor_imp(Allocator2&& a2, typename
+                         enable_if<is_convertible<Allocator2, Allocator>::value,
+                                   int>::type = 0);
+
+    virtual void *allocate(size_t bytes, size_t alignment = 0);
+    virtual void deallocate(void *p, size_t bytes, size_t alignment = 0);
+
+    virtual bool is_equal(const memory_resource& other) const;
+
+    allocator_type get_allocator() const { return m_alloc; }
+};
 
 } // end namespace __details
+
+// A resource_adaptor converts a traditional STL allocator to a polymorphic
+// memory resource.  Somehow, this didn't make it into C++17, but it should
+// have, so here it is.
+// This alias ensures that `resource_adaptor<T>` and
+// `resource_adaptor<U>` are always the same type, whether or not
+// `T` and `U` are the same type.
+template <class Allocator>
+using resource_adaptor = __details::resource_adaptor_imp<
+    typename allocator_traits<Allocator>::template rebind_alloc<byte>>;
+
+// Memory resource that uses new and delete.
+class new_delete_resource : public resource_adaptor<allocator<byte>> { };
+
+// Return a pointer to a global instance of `new_delete_resource`.
+new_delete_resource *new_delete_resource_singleton();
+
+// Get the current default resource
+memory_resource *get_default_resource();
+
+// Set the default resource
+memory_resource *set_default_resource(memory_resource *r);
 
 template <class Tp>
 class polymorphic_allocator :
@@ -259,7 +248,7 @@ pmr::set_default_resource(pmr::memory_resource *r)
 template <class Allocator>
     template <class Allocator2>
 inline
-pmr::resource_adaptor_imp<Allocator>::resource_adaptor_imp(
+pmr::__details::resource_adaptor_imp<Allocator>::resource_adaptor_imp(
     Allocator2&& a2, typename
     enable_if<is_convertible<Allocator2, Allocator>::value, int>::type)
     : m_alloc(forward<Allocator2>(a2))
@@ -268,7 +257,7 @@ pmr::resource_adaptor_imp<Allocator>::resource_adaptor_imp(
 
 template <class Allocator>
 template <size_t Align>
-void *pmr::resource_adaptor_imp<Allocator>::do_allocate(size_t bytes)
+void *pmr::__details::resource_adaptor_imp<Allocator>::do_allocate(size_t bytes)
 {
     typedef __details::aligned_chunk<Align> chunk;
     size_t chunks = (bytes + Align - 1) / Align;
@@ -281,8 +270,8 @@ void *pmr::resource_adaptor_imp<Allocator>::do_allocate(size_t bytes)
 
 template <class Allocator>
 template <size_t Align>
-void pmr::resource_adaptor_imp<Allocator>::do_deallocate(void   *p,
-                                                               size_t  bytes)
+void pmr::__details::resource_adaptor_imp<Allocator>::do_deallocate(void   *p,
+                                                                  size_t  bytes)
 {
     typedef __details::aligned_chunk<Align> chunk;
     size_t chunks = (bytes + Align - 1) / Align;
@@ -294,13 +283,13 @@ void pmr::resource_adaptor_imp<Allocator>::do_deallocate(void   *p,
 }
 
 template <class Allocator>
-void *pmr::resource_adaptor_imp<Allocator>::allocate(size_t bytes,
-                                                           size_t alignment)
+void *pmr::__details::resource_adaptor_imp<Allocator>::allocate(size_t bytes,
+                                                              size_t alignment)
 {
     static const size_t max_natural_alignment = sizeof(max_align_t);
 
     if (0 == alignment) {
-        // Choose natural alignment for 'bytes'
+        // Choose natural alignment for `bytes`
         alignment = ((bytes ^ (bytes - 1)) >> 1) + 1;
         if (alignment > max_natural_alignment)
             alignment = max_natural_alignment;
@@ -335,14 +324,14 @@ void *pmr::resource_adaptor_imp<Allocator>::allocate(size_t bytes,
 }
 
 template <class Allocator>
-void pmr::resource_adaptor_imp<Allocator>::deallocate(void   *p,
+void pmr::__details::resource_adaptor_imp<Allocator>::deallocate(void   *p,
                                                             size_t  bytes,
                                                             size_t  alignment)
 {
     static const size_t max_natural_alignment = sizeof(max_align_t);
 
     if (0 == alignment) {
-        // Choose natural alignment for 'bytes'
+        // Choose natural alignment for `bytes`
         alignment = ((bytes ^ (bytes - 1)) >> 1) + 1;
         if (alignment > max_natural_alignment)
             alignment = max_natural_alignment;
@@ -367,7 +356,7 @@ void pmr::resource_adaptor_imp<Allocator>::deallocate(void   *p,
 }
 
 template <class Allocator>
-bool pmr::resource_adaptor_imp<Allocator>::is_equal(
+bool pmr::__details::resource_adaptor_imp<Allocator>::is_equal(
     const memory_resource& other) const
 {
     const resource_adaptor_imp *other_p =
@@ -442,11 +431,11 @@ inline
 bool __pmrd::operator==(const __pmrd::polymorphic_allocator_imp<T1>& a,
                         const __pmrd::polymorphic_allocator_imp<T2>& b)
 {
-    // 'operator==' for 'memory_resource' first checks for equality of
-    // addresses and calls 'is_equal' only if the addresses differ.  The call
-    // 'is_equal' because some polymorphic allocators are produced as a result
-    // of type erasure.  In that case, 'a' and 'b' may contain
-    // 'memory_resource's with different addresses which, nevertheless,
+    // `operator==` for `memory_resource` first checks for equality of
+    // addresses and calls `is_equal` only if the addresses differ.  The call
+    // `is_equal` because some polymorphic allocators are produced as a result
+    // of type erasure.  In that case, `a` and `b` may contain
+    // `memory_resource`s with different addresses which, nevertheless,
     // should compare equal.
     return *a.resource() == *b.resource();
 }
