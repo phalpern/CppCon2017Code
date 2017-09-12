@@ -1,6 +1,6 @@
 /* polymorphic_allocator.h                  -*-C++-*-
  *
- *            Copyright 2016 Pablo Halpern.
+ *            Copyright 2017 Pablo Halpern.
  * Distributed under the Boost Software License, Version 1.0.
  *    (See accompanying file LICENSE_1_0.txt or copy at
  *          http://www.boost.org/LICENSE_1_0.txt)
@@ -37,15 +37,24 @@ class memory_resource
 
   public:
     virtual ~memory_resource();
-    virtual void* allocate(size_t bytes, size_t alignment = 0) = 0;
-    virtual void  deallocate(void *p, size_t bytes, size_t alignment = 0) = 0;
+
+    void* allocate(size_t bytes, size_t alignment = 0)
+        { return do_allocate(bytes, alignment); }
+    void  deallocate(void *p, size_t bytes, size_t alignment = 0)
+        { return do_deallocate(p, bytes, alignment); }
 
     // `is_equal` is needed because polymorphic allocators are sometimes
     // produced as a result of type erasure.  In that case, two different
     // instances of a polymorphic_memory_resource may actually represent
     // the same underlying allocator and should compare equal, even though
     // their addresses are different.
-    virtual bool is_equal(const memory_resource& other) const = 0;
+    bool is_equal(const memory_resource& other) const noexcept
+        { return do_is_equal(other); }
+
+  protected:
+    virtual void* do_allocate(size_t bytes, size_t alignment = 0) = 0;
+    virtual void  do_deallocate(void *p, size_t bytes, size_t alignment=0) = 0;
+    virtual bool  do_is_equal(const memory_resource& other) const noexcept = 0;
 };
 
 inline
@@ -119,10 +128,10 @@ class resource_adaptor_imp : public memory_resource
         template rebind_alloc<max_align_t> m_alloc;
 
     template <size_t Align>
-    void *do_allocate(size_t bytes);
+    void *allocate_imp(size_t bytes);
 
     template <size_t Align>
-    void do_deallocate(void *p, size_t bytes);
+    void deallocate_imp(void *p, size_t bytes);
 
   public:
     typedef Allocator allocator_type;
@@ -136,10 +145,11 @@ class resource_adaptor_imp : public memory_resource
                          enable_if<is_convertible<Allocator2, Allocator>::value,
                                    int>::type = 0);
 
-    virtual void *allocate(size_t bytes, size_t alignment = 0);
-    virtual void deallocate(void *p, size_t bytes, size_t alignment = 0);
+  protected:
+    void *do_allocate(size_t bytes, size_t alignment = 0) override;
+    void do_deallocate(void *p, size_t bytes, size_t alignment = 0) override;
 
-    virtual bool is_equal(const memory_resource& other) const;
+    bool do_is_equal(const memory_resource& other) const noexcept override;
 
     allocator_type get_allocator() const { return m_alloc; }
 };
@@ -257,7 +267,8 @@ pmr::__details::resource_adaptor_imp<Allocator>::resource_adaptor_imp(
 
 template <class Allocator>
 template <size_t Align>
-void *pmr::__details::resource_adaptor_imp<Allocator>::do_allocate(size_t bytes)
+void *
+pmr::__details::resource_adaptor_imp<Allocator>::allocate_imp(size_t bytes)
 {
     typedef __details::aligned_chunk<Align> chunk;
     size_t chunks = (bytes + Align - 1) / Align;
@@ -270,8 +281,9 @@ void *pmr::__details::resource_adaptor_imp<Allocator>::do_allocate(size_t bytes)
 
 template <class Allocator>
 template <size_t Align>
-void pmr::__details::resource_adaptor_imp<Allocator>::do_deallocate(void   *p,
-                                                                  size_t  bytes)
+void
+pmr::__details::resource_adaptor_imp<Allocator>::deallocate_imp(void   *p,
+                                                                size_t  bytes)
 {
     typedef __details::aligned_chunk<Align> chunk;
     size_t chunks = (bytes + Align - 1) / Align;
@@ -283,8 +295,9 @@ void pmr::__details::resource_adaptor_imp<Allocator>::do_deallocate(void   *p,
 }
 
 template <class Allocator>
-void *pmr::__details::resource_adaptor_imp<Allocator>::allocate(size_t bytes,
-                                                              size_t alignment)
+void *
+pmr::__details::resource_adaptor_imp<Allocator>::do_allocate(size_t bytes,
+                                                             size_t alignment)
 {
     static const size_t max_natural_alignment = sizeof(max_align_t);
 
@@ -296,17 +309,17 @@ void *pmr::__details::resource_adaptor_imp<Allocator>::allocate(size_t bytes,
     }
 
     switch (alignment) {
-      case 1: return do_allocate<1>(bytes);
-      case 2: return do_allocate<2>(bytes);
-      case 4: return do_allocate<4>(bytes);
-      case 8: return do_allocate<8>(bytes);
-      case 16: return do_allocate<16>(bytes);
-      case 32: return do_allocate<32>(bytes);
-      case 64: return do_allocate<64>(bytes);
+      case 1: return allocate_imp<1>(bytes);
+      case 2: return allocate_imp<2>(bytes);
+      case 4: return allocate_imp<4>(bytes);
+      case 8: return allocate_imp<8>(bytes);
+      case 16: return allocate_imp<16>(bytes);
+      case 32: return allocate_imp<32>(bytes);
+      case 64: return allocate_imp<64>(bytes);
       default: {
           size_t chunks = (bytes + sizeof(void*) + alignment - 1) / 64;
           size_t chunkbytes = chunks * 64;
-          void *original = do_allocate<64>(chunkbytes);
+          void *original = allocate_imp<64>(chunkbytes);
 
           // Make room for original pointer storage
           char *p  = static_cast<char*>(original) + sizeof(void*);
@@ -324,9 +337,10 @@ void *pmr::__details::resource_adaptor_imp<Allocator>::allocate(size_t bytes,
 }
 
 template <class Allocator>
-void pmr::__details::resource_adaptor_imp<Allocator>::deallocate(void   *p,
-                                                            size_t  bytes,
-                                                            size_t  alignment)
+void
+pmr::__details::resource_adaptor_imp<Allocator>::do_deallocate(void  *p,
+                                                               size_t bytes,
+                                                               size_t alignment)
 {
     static const size_t max_natural_alignment = sizeof(max_align_t);
 
@@ -338,26 +352,26 @@ void pmr::__details::resource_adaptor_imp<Allocator>::deallocate(void   *p,
     }
 
     switch (alignment) {
-      case 1: do_deallocate<1>(p, bytes); break;
-      case 2: do_deallocate<2>(p, bytes); break;
-      case 4: do_deallocate<4>(p, bytes); break;
-      case 8: do_deallocate<8>(p, bytes); break;
-      case 16: do_deallocate<16>(p, bytes); break;
-      case 32: do_deallocate<32>(p, bytes); break;
-      case 64: do_deallocate<64>(p, bytes); break;
+      case 1: deallocate_imp<1>(p, bytes); break;
+      case 2: deallocate_imp<2>(p, bytes); break;
+      case 4: deallocate_imp<4>(p, bytes); break;
+      case 8: deallocate_imp<8>(p, bytes); break;
+      case 16: deallocate_imp<16>(p, bytes); break;
+      case 32: deallocate_imp<32>(p, bytes); break;
+      case 64: deallocate_imp<64>(p, bytes); break;
       default: {
           size_t chunks = (bytes + sizeof(void*) + alignment - 1) / 64;
           size_t chunkbytes = chunks * 64;
           void *original = reinterpret_cast<void**>(p)[-1];
 
-          do_deallocate<64>(original, chunkbytes);
+          deallocate_imp<64>(original, chunkbytes);
       }
     }
 }
 
 template <class Allocator>
-bool pmr::__details::resource_adaptor_imp<Allocator>::is_equal(
-    const memory_resource& other) const
+bool pmr::__details::resource_adaptor_imp<Allocator>::do_is_equal(
+    const memory_resource& other) const noexcept
 {
     const resource_adaptor_imp *other_p =
         dynamic_cast<const resource_adaptor_imp*>(&other);

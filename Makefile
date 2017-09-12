@@ -17,13 +17,13 @@ all : polymorphic_allocator.test uses_allocator_wrapper.test xfunction.test
 
 .PHONY : .FORCE clean
 
-%.t : %.t.cpp %.h polymorphic_allocator.o .FORCE
+%.t : %.t.cpp %.h %.o polymorphic_allocator.o .FORCE
 	$(CXX) $(CXXFLAGS) -o $@ -g $*.t.cpp polymorphic_allocator.o
 
 %.test : %.t
 	./$< $(TESTARGS)
 
-%.o : %.cpp
+%.o : %.cpp %.h
 	$(CXX) $(CXXFLAGS) -c -g $<
 
 %.pdf : %.md

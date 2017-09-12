@@ -194,20 +194,21 @@ class TestResource : public cpp17::pmr::memory_resource
 
     // Not copyable
     TestResource(const TestResource&);
-    TestResource operator=(const TestResource&);
+    TestResource& operator=(const TestResource&);
 
-public:
+  public:
     TestResource() { }
-
-    virtual ~TestResource();
-    virtual void* allocate(size_t bytes, size_t alignment = 0);
-    virtual void  deallocate(void *p, size_t bytes, size_t alignment = 0);
-    virtual bool is_equal(const memory_resource& other) const;
+    ~TestResource() override;
 
     AllocCounters      & counters()       { return m_counters; }
     AllocCounters const& counters() const { return m_counters; }
 
     void clear() { m_counters.clear(); }
+
+  protected:
+    void* do_allocate(size_t bytes, size_t alignment = 0) override;
+    void  do_deallocate(void *p, size_t bytes, size_t alignment = 0) override;
+    bool  do_is_equal(const memory_resource& other) const noexcept override;
 };
 
 TestResource::~TestResource()
@@ -215,17 +216,17 @@ TestResource::~TestResource()
     ASSERT(0 == m_counters.blocks_outstanding());
 }
 
-void* TestResource::allocate(size_t bytes, size_t alignment)
+void* TestResource::do_allocate(size_t bytes, size_t alignment)
 {
     return countedAllocate(bytes, &m_counters);
 }
 
-void  TestResource::deallocate(void *p, size_t bytes, size_t alignment)
+void  TestResource::do_deallocate(void *p, size_t bytes, size_t alignment)
 {
     countedDeallocate(p, bytes, &m_counters);
 }
 
-bool TestResource::is_equal(const memory_resource& other) const
+bool TestResource::do_is_equal(const memory_resource& other) const noexcept
 {
     // Two TestResource objects are equal only if they are the same object
     return this == &other;
