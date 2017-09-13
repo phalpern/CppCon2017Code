@@ -9,7 +9,7 @@ CXX=g++ -std=c++11
 CXXFLAGS=-I. -Wall
 WD := $(shell basename $(PWD))
 
-all : polymorphic_allocator.test uses_allocator_wrapper.test xfunction.test
+all : polymorphic_allocator.test test_resource.test
 
 .SECONDARY :
 
@@ -17,20 +17,21 @@ all : polymorphic_allocator.test uses_allocator_wrapper.test xfunction.test
 
 .PHONY : .FORCE clean
 
-%.t : %.t.cpp %.h %.o polymorphic_allocator.o .FORCE
-	$(CXX) $(CXXFLAGS) -o $@ -g $*.t.cpp polymorphic_allocator.o
+.PRECIOUS : .t
 
 %.test : %.t
 	./$< $(TESTARGS)
 
-%.o : %.cpp %.h
+%.t : %.t.o %.o
+	$(CXX) $(CXXFLAGS) -o $@ -g $^
+
+%.o : %.cpp %.h polymorphic_allocator.h
 	$(CXX) $(CXXFLAGS) -c -g $<
 
-%.pdf : %.md
-	cd .. && make $(WD)/$@
+%.t.o : %.t.cpp %.h polymorphic_allocator.h
+	$(CXX) $(CXXFLAGS) -c -g $<
 
-%.html : %.md
-	cd .. && make $(WD)/$@
+test_resource.t :: polymorphic_allocator.o
 
 clean :
 	rm -f *.t *.o
