@@ -58,35 +58,8 @@ static void aSsErT(int c, const char *s, int i) {
                          << L << "\t" << #M << ": " << M << "\t" << #N     \
                          << ": " << N << "\n"; aSsErT(1, #X, __LINE__); } }
 
-// Allow compilation of individual test-cases (for test drivers that take a
-// very long time to compile).  Specify '-DSINGLE_TEST=<testcase>' to compile
-// only the '<testcase>' test case.
-#define TEST_IS_ENABLED(num) (! defined(SINGLE_TEST) || SINGLE_TEST == (num))
-
-
 //=============================================================================
-//                  SEMI-STANDARD TEST OUTPUT MACROS
-//-----------------------------------------------------------------------------
-#define P(X) std::cout << #X " = " << (X) << std::endl; // Print identifier and value.
-#define Q(X) std::cout << "<| " #X " |>" << std::endl;  // Quote identifier literally.
-#define P_(X) std::cout << #X " = " << (X) << ", " << flush; // P(X) without '\n'
-#define L_ __LINE__                           // current Line number
-#define T_ std::cout << "\t" << flush;             // Print a tab (w/o newline)
-
-//=============================================================================
-//                  GLOBAL TYPEDEFS/CONSTANTS FOR TESTING
-//-----------------------------------------------------------------------------
-
-enum { VERBOSE_ARG_NUM = 2, VERY_VERBOSE_ARG_NUM, VERY_VERY_VERBOSE_ARG_NUM };
-
-//=============================================================================
-//                  GLOBAL HELPER FUNCTIONS FOR TESTING
-//-----------------------------------------------------------------------------
-static inline int min(int a, int b) { return a < b ? a : b; }
-    // Return the minimum of the specified 'a' and 'b' arguments.
-
-//=============================================================================
-//                  CLASSES FOR TESTING USAGE EXAMPLES
+//                  CLASSES FOR TESTING
 //-----------------------------------------------------------------------------
 
 class AllocCounters
@@ -206,8 +179,8 @@ class TestResource : public cpp17::pmr::memory_resource
     void clear() { m_counters.clear(); }
 
   protected:
-    void* do_allocate(size_t bytes, size_t alignment = 0) override;
-    void  do_deallocate(void *p, size_t bytes, size_t alignment = 0) override;
+    void* do_allocate(size_t bytes, size_t alignment) override;
+    void  do_deallocate(void *p, size_t bytes, size_t alignment) override;
     bool  do_is_equal(const memory_resource& other) const noexcept override;
 };
 
@@ -569,9 +542,6 @@ int main(int argc, char *argv[])
     using namespace cpp17::pmr;
 
     int test = argc > 1 ? atoi(argv[1]) : 0;
-//     int verbose = argc > 2;
-//     int veryVerbose = argc > 3;
-//     int veryVeryVerbose = argc > 4;
 
     std::cout << "TEST " << __FILE__;
     if (test != 0)
@@ -599,13 +569,17 @@ int main(int argc, char *argv[])
             memory_resource *r = new_delete_resource_singleton();
             ASSERT(cpp17::pmr::get_default_resource() == r);
 
-            void *p = r->allocate(5);
+            void *p = r->allocate(5, 1);
             ++expBlocks;
             expBytes += 5;
 
             ASSERT(p);
             ASSERT(newDeleteCounters.blocks_outstanding() == expBlocks);
             ASSERT(newDeleteCounters.bytes_outstanding() == expBytes);
+
+            r->deallocate(p, 5, 1);
+            ASSERT(newDeleteCounters.blocks_outstanding() == 0);
+            ASSERT(newDeleteCounters.bytes_outstanding() == 0);
         }
 
         cpp17::pmr::set_default_resource(&dfltTestRsrc);

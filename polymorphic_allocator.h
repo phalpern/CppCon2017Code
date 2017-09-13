@@ -30,6 +30,8 @@ namespace pmr {
 // Conforms to the C++17 standard, section [mem.res.class].
 class memory_resource
 {
+    static constexpr size_t max_align = alignof(max_align_t);
+
     static atomic<memory_resource *> s_default_resource;
 
     friend memory_resource *set_default_resource(memory_resource *);
@@ -38,9 +40,9 @@ class memory_resource
   public:
     virtual ~memory_resource();
 
-    void* allocate(size_t bytes, size_t alignment = 0)
+    void* allocate(size_t bytes, size_t alignment = max_align)
         { return do_allocate(bytes, alignment); }
-    void  deallocate(void *p, size_t bytes, size_t alignment = 0)
+    void  deallocate(void *p, size_t bytes, size_t alignment = max_align)
         { return do_deallocate(p, bytes, alignment); }
 
     // `is_equal` is needed because polymorphic allocators are sometimes
@@ -52,8 +54,8 @@ class memory_resource
         { return do_is_equal(other); }
 
   protected:
-    virtual void* do_allocate(size_t bytes, size_t alignment = 0) = 0;
-    virtual void  do_deallocate(void *p, size_t bytes, size_t alignment=0) = 0;
+    virtual void* do_allocate(size_t bytes, size_t alignment) = 0;
+    virtual void  do_deallocate(void *p, size_t bytes, size_t alignment) = 0;
     virtual bool  do_is_equal(const memory_resource& other) const noexcept = 0;
 };
 
