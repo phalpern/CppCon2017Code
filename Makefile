@@ -33,5 +33,9 @@ all : polymorphic_allocator.test test_resource.test
 
 test_resource.t :: polymorphic_allocator.o
 
+slist.t :: polymorphic_allocator.o test_resource.o
+
+slist.t.o :: test_resource.h
+
 clean :
 	rm -f *.t *.o
