@@ -1,3 +1,6 @@
 *.o
 *.t
 *~
+
+core
+*.stackdump

@@ -61,8 +61,8 @@ public:
 
   // Note: erasing elements invalidates iterators to the node
   // following the element being erased.
-  iterator erase(iterator i);
   iterator erase(iterator b, iterator e);
+  iterator erase(iterator i) { iterator e = i; return erase(i, ++e); }
   void pop_front() { erase(begin()); }
 
   allocator_type get_allocator() const { return m_allocator; }
@@ -236,29 +236,16 @@ template <typename... Args>
 typename slist<Tp>::iterator
 slist<Tp>::emplace(iterator i, Args&&... args) {
   node* new_node = static_cast<node*>(
-    m_allocator.resource()->allocate(sizeof(Tp), alignof(Tp)));
+    m_allocator.resource()->allocate(sizeof(node), alignof(node)));
   m_allocator.construct(std::addressof(new_node->m_value),
                         std::forward<Args>(args)...);
+
   new_node->m_next = i.m_prev->m_next;
   i.m_prev->m_next = new_node;
   if (i.m_prev == m_tail_p)
     m_tail_p = new_node;  // Added at end
   ++m_size;
   return i;
-}
-
-template <typename Tp>
-typename slist<Tp>::iterator
-slist<Tp>::erase(iterator i) {
-  node* old_node = i.m_prev->m_next;
-  if (m_tail_p == old_node)
-    m_tail_p = i.m_prev;  // Deleting last node
-  i.m_prev->m_next = old_node->m_next;
-  --m_size;
-  m_allocator.destroy(std::addressof(old_node->m_value));
-  m_allocator.resource()->deallocate(old_node,
-                                     sizeof(Tp), alignof(Tp));
-  return ++i;
 }
 
 template <typename Tp>
@@ -275,7 +262,7 @@ slist<Tp>::erase(iterator b, iterator e) {
     --m_size;
     m_allocator.destroy(std::addressof(old_node->m_value));
     m_allocator.resource()->deallocate(old_node,
-                                       sizeof(Tp), alignof(Tp));
+                                       sizeof(node), alignof(node));
   }
 
   return ++b;
