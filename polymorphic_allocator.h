@@ -85,7 +85,16 @@ class polymorphic_allocator_imp
     memory_resource* m_resource;
 
   public:
-    typedef Tp value_type;
+    using value_type = Tp;
+
+    // These types are old-fashioned, pre-C++11 requirements, still needed by
+    // g++'s `basic_string` implementation.
+    using size_type       = size_t;
+    using difference_type = ptrdiff_t;
+    using reference       = Tp&;
+    using const_reference = Tp const&;
+    using pointer         = Tp*;
+    using const_pointer   = Tp const*;
 
     polymorphic_allocator_imp();
     polymorphic_allocator_imp(memory_resource *r);

@@ -31,11 +31,13 @@ all : polymorphic_allocator.test test_resource.test
 %.t.o : %.t.cpp %.h polymorphic_allocator.h
 	$(CXX) $(CXXFLAGS) -c -g $<
 
+test_resource.o :: pmr_vector.h
+
 test_resource.t :: polymorphic_allocator.o
 
 slist.t :: polymorphic_allocator.o test_resource.o
 
-slist.t.o :: test_resource.h
+slist.t.o :: test_resource.h pmr_string.h
 
 clean :
 	rm -f *.t *.o
