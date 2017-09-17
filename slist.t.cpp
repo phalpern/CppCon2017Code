@@ -98,6 +98,7 @@ int main(int argc, char *argv[])
     using poly_alloc = pmr::polymorphic_allocator<byte>;
 
     test_resource tr;
+    poly_alloc    ta(&tr);
 
     std::cout << "Testing basic constructor\n";
     {
@@ -108,8 +109,8 @@ int main(int argc, char *argv[])
         ASSERT(poly_alloc{} == lst1.get_allocator());
 
         slist<int> lst2(&tr);  // auto-convert resource ptr to poly_alloc
-        ASSERT(poly_alloc(&tr) == lst2.get_allocator());
-        ASSERT(0 == tr.blocks_outstanding());
+        ASSERT(ta == lst2.get_allocator());
+        ASSERT(0  == tr.blocks_outstanding());
     }
 
     {
@@ -155,22 +156,39 @@ int main(int argc, char *argv[])
 
     std::cout << "Testing scoped allocator behavior:\n";
     {
+        // pmr::string foo('1', 1, &tr);
+        // pmr::string bar("10", 2, ta);
         std::cout << "Testing emplace_back & emplace_front\n";
         slist<pmr::string> lst4(&tr);
         lst4.emplace_back("10", 2);
         ASSERT("10" == lst4.front());
+        ASSERT(ta == lst4.front().get_allocator());
         ASSERT(check(lst4, { "10" }, &tr));
-        ASSERT(lst4.size() * 2 == tr.blocks_outstanding());
-        lst4.emplace_back(2, '1');
+        lst4.front().resize(33);  // Exceed small-object optimization
+        ASSERT(2 == tr.blocks_outstanding());
+        lst4.front().resize(2);
+        lst4.emplace_back(2, '1');  // '1' x 2 -> "11"
         ASSERT("10" == lst4.front());
         ASSERT(check(lst4, { "10", "11" }, &tr));
-        ASSERT(lst4.size() * 2 == tr.blocks_outstanding());
         lst4.emplace_front("1zzq", 1);
         ASSERT("1" == lst4.front());
         ASSERT(check(lst4, { "1", "10", "11" }, &tr));
-        ASSERT(lst4.size() * 2 == tr.blocks_outstanding());
 
-        lst4.pop_front();
+        auto i = ++lst4.begin();
+        ASSERT("10" == *i);
+        *i++ = "6";
+        ASSERT(check(lst4, { "1", "6", "11" }));
+        ASSERT("11" == *i);
+
+        i = lst4.emplace(i, 1, '7');
+        ASSERT("7" == *i);
+        ASSERT(check(lst4, { "1", "6", "7", "11" }));
+        ++i;
+        i = lst4.emplace(i, "nine\n", 4);
+        ASSERT("nine" == *i);
+        ASSERT(check(lst4, { "1", "6", "7", "nine", "11" }));
+        i = lst4.insert(i, pmr::string("8"));
+        ASSERT(check(lst4, { "1", "6", "7", "8", "nine", "11" }));
     }
     ASSERT(0 == tr.blocks_outstanding());  // No leaks
 

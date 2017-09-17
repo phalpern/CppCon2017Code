@@ -282,7 +282,7 @@ public:
         , data_(nullptr) { assign(other.data_); }
 
     SimpleString(SimpleString&& other)
-        : alloc_(std::move(other.alloc_))
+        : alloc_(other.alloc_)
         , data_(other.data_) { other.data_ = nullptr; }
 
     SimpleString(const SimpleString& other, const Alloc& a)
