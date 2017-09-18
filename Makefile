@@ -9,7 +9,7 @@ CXX=g++ -std=c++11
 CXXFLAGS=-I. -Wall
 WD := $(shell basename $(PWD))
 
-all : polymorphic_allocator.test test_resource.test
+all : polymorphic_allocator.test test_resource.test slist.test
 
 .SECONDARY :
 

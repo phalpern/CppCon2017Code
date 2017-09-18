@@ -156,7 +156,7 @@ void* operator new(std::size_t nbytes)
     return countedAllocate(nbytes, &newDeleteCounters);
 }
 
-void operator delete(void *p)
+void operator delete(void *p) noexcept
 {
     countedDeallocate(p, &newDeleteCounters);
 }
@@ -253,9 +253,6 @@ int func(const char* s)
 
 struct UniqDummyType { void zzzzz(UniqDummyType, bool) { } };
 typedef void (UniqDummyType::*UniqPointerType)(UniqDummyType);
-
-typedef void (UniqDummyType::*ConvertibleToBoolType)(UniqDummyType, bool);
-const ConvertibleToBoolType ConvertibleToTrue = &UniqDummyType::zzzzz;
 
 template <typename _Tp> struct unvoid { typedef _Tp type; };
 template <> struct unvoid<void> { struct type { }; };
