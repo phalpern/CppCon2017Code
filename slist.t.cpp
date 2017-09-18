@@ -156,8 +156,6 @@ int main(int argc, char *argv[])
 
     std::cout << "Testing scoped allocator behavior:\n";
     {
-        // pmr::string foo('1', 1, &tr);
-        // pmr::string bar("10", 2, ta);
         std::cout << "Testing emplace_back & emplace_front\n";
         slist<pmr::string> lst4(&tr);
         lst4.emplace_back("10", 2);
@@ -189,6 +187,179 @@ int main(int argc, char *argv[])
         ASSERT(check(lst4, { "1", "6", "7", "nine", "11" }));
         i = lst4.insert(i, pmr::string("8"));
         ASSERT(check(lst4, { "1", "6", "7", "8", "nine", "11" }));
+
+        std::cout << "Testing erase()\n";
+        auto pre_erase_blks = tr.blocks_outstanding();
+        i = lst4.erase(i, std::next(i, 2));
+        ASSERT(check(lst4, { "1", "6", "7", "11" }));
+        ASSERT(tr.blocks_outstanding() <= pre_erase_blks - 2);
+        ASSERT("11" == *i);
+        pre_erase_blks = tr.blocks_outstanding();
+        i = lst4.erase(i);
+        ASSERT(check(lst4, { "1", "6", "7" }));
+        ASSERT(tr.blocks_outstanding() < pre_erase_blks);
+        ASSERT(lst4.end() == i);
+        pre_erase_blks = tr.blocks_outstanding();
+        i = lst4.erase(lst4.begin());
+        ASSERT(check(lst4, { "6", "7" }));
+        ASSERT(tr.blocks_outstanding() < pre_erase_blks);
+        ASSERT(lst4.begin() == i);
+        ASSERT("6" == *i);
+
+        std::cout << "Testing copy constructor and equality operators\n";
+        {
+            auto pre_copy_blks = tr.blocks_outstanding();
+            slist<pmr::string> lst5(lst4);
+            ASSERT(lst5 == lst4);
+            ASSERT(! (lst5 != lst4));
+            ASSERT(check(lst4, { "6", "7" }));
+            ASSERT(check(lst5, { "6", "7" }));
+            ASSERT(tr.blocks_outstanding() == pre_copy_blks);
+            ASSERT(lst5.get_allocator().resource() ==
+                   pmr::new_delete_resource_singleton());
+            lst5.push_back("12");
+            ASSERT(lst5 != lst4);
+            ASSERT(check(lst4, { "6", "7" }));
+            ASSERT(check(lst5, { "6", "7", "12" }));
+        }
+
+        std::cout << "Testing extended copy constructor\n";
+        {
+            test_resource tr2;
+            pmr::polymorphic_allocator<cpp17::byte> ta2(&tr2);
+            auto pre_copy_blks = tr.blocks_outstanding();
+            slist<pmr::string> lst6(lst4, &tr2);
+            ASSERT(lst6 == lst4);
+            ASSERT(check(lst4, { "6", "7" }));
+            ASSERT(check(lst6, { "6", "7" }));
+            ASSERT(tr.blocks_outstanding() == pre_copy_blks);
+            ASSERT(tr2.blocks_outstanding() == tr.blocks_outstanding());
+            ASSERT(lst6.get_allocator() == ta2);
+            lst6.front() = "5";
+            ASSERT(lst6 != lst4);
+            ASSERT(check(lst4, { "6", "7" }));
+            ASSERT(check(lst6, { "5", "7" }));
+        }
+
+        std::cout << "Testing move constructor\n";
+        {
+            test_resource tr2;
+
+            slist<pmr::string> lst4b(lst4, &tr2);  // Copy
+            auto pre_move_blks = tr2.blocks_outstanding();
+            slist<pmr::string> lst7(std::move(lst4b)); // Move from copy
+            ASSERT(lst7 == lst4);
+            ASSERT(lst4b.empty())
+            ASSERT(check(lst7, { "6", "7" }));
+            ASSERT(tr2.blocks_outstanding() == pre_move_blks); // no alloc/free
+            ASSERT(lst7.get_allocator().resource() == &tr2)
+            lst7.push_back("12");
+            ASSERT(lst7 != lst4);
+            ASSERT(check(lst7, { "6", "7", "12" }));
+        }
+
+        std::cout << "Testing extended move constructor\n";
+        {
+            slist<pmr::string> lst4b(lst4, &tr);  // Copy
+            // Extended move to the same allocator works just like a move
+            auto pre_move_blks = tr.blocks_outstanding();
+            slist<pmr::string> lst8(std::move(lst4b), &tr);
+            ASSERT(lst8 == lst4);
+            ASSERT(lst4b.empty())
+            ASSERT(check(lst8, { "6", "7" }));
+            ASSERT(tr.blocks_outstanding() == pre_move_blks); // no alloc/free
+            ASSERT(lst8.get_allocator().resource() == &tr)
+            lst8.push_back("12");
+            ASSERT(lst8 != lst4);
+            ASSERT(check(lst8, { "6", "7", "12" }));
+        }
+        {
+            test_resource tr2;
+            pmr::polymorphic_allocator<cpp17::byte> ta2(&tr2);
+
+            // Extended move to a new allocator works just like a copy
+            auto pre_move_blks = tr.blocks_outstanding();
+            slist<pmr::string> lst9(std::move(lst4), &tr2);
+            ASSERT(lst9 == lst4);
+            ASSERT(check(lst4, { "6", "7" }));
+            ASSERT(check(lst9, { "6", "7" }));
+            ASSERT(tr.blocks_outstanding() == pre_move_blks);
+            ASSERT(tr2.blocks_outstanding() == tr.blocks_outstanding());
+            ASSERT(lst9.get_allocator() == ta2);
+            lst9.front() = "5";
+            ASSERT(lst9 != lst4);
+            ASSERT(check(lst4, { "6", "7" }));
+            ASSERT(check(lst9, { "5", "7" }));
+        }
+
+        std::cout << "Testing copy assignment\n";
+        {
+            auto pre_copy_blks = tr.blocks_outstanding();
+            slist<pmr::string> lst10(&tr);
+            lst10.push_back("stuff");
+            lst10 = lst4;
+            ASSERT(lst10 == lst4);
+            ASSERT(check(lst4, { "6", "7" }));
+            ASSERT(check(lst10, { "6", "7" }));
+            ASSERT(tr.blocks_outstanding() == 2 * pre_copy_blks);
+            lst10.push_back("12");
+            ASSERT(lst10 != lst4);
+            ASSERT(check(lst4, { "6", "7" }));
+            ASSERT(check(lst10, { "6", "7", "12" }));
+        }
+
+        std::cout << "Testing move assignment\n";
+        {
+            test_resource tr2;
+            slist<pmr::string> lst4b(lst4, &tr2);  // Copy
+
+            // move-assign with the same allocator
+            auto pre_move_blks = tr2.blocks_outstanding();
+            slist<pmr::string> lst11(lst4b.get_allocator());
+            lst11.push_back("stuff");
+            lst11 = std::move(lst4b);
+            ASSERT(lst11 == lst4);
+            ASSERT(lst4b.empty());
+            ASSERT(check(lst11, { "6", "7" }));
+            ASSERT(tr2.blocks_outstanding() == pre_move_blks); // no alloc/free
+            lst11.push_back("12");
+            ASSERT(lst11 != lst4);
+            ASSERT(check(lst11, { "6", "7", "12" }));
+        }
+        {
+            test_resource tr2;
+
+            // move-assign with different allocator is like copy-asign
+            auto pre_move_blks = tr.blocks_outstanding();
+            slist<pmr::string> lst12(&tr2);
+            lst12.push_front("stuff");
+            lst12 = std::move(lst4);
+            ASSERT(lst12 == lst4);
+            ASSERT(check(lst4, { "6", "7" }));
+            ASSERT(check(lst12, { "6", "7" }));
+            ASSERT(tr.blocks_outstanding() == pre_move_blks);
+            ASSERT(tr2.blocks_outstanding() == tr.blocks_outstanding());
+            lst12.front() = "5";
+            ASSERT(lst12 != lst4);
+            ASSERT(check(lst4, { "6", "7" }));
+            ASSERT(check(lst12, { "5", "7" }));
+        }
+
+        std::cout << "Testing swap()\n";
+        {
+            slist<pmr::string> lst13(&tr);
+            lst13.push_front("hello");
+            lst13.push_back("world");
+            ASSERT(check(lst13, { "hello", "world" }));
+            auto pre_swap_blks = tr.blocks_outstanding();
+            lst4.swap(lst13);
+            ASSERT(tr.blocks_outstanding() == pre_swap_blks);
+            using namespace std;
+            swap(lst4, lst13);
+            ASSERT(check(lst4, { "6", "7" }));
+            ASSERT(check(lst13, { "hello", "world" }));
+            ASSERT(tr.blocks_outstanding() == pre_swap_blks);
+        }
     }
     ASSERT(0 == tr.blocks_outstanding());  // No leaks
 

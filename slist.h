@@ -11,6 +11,7 @@
 
 #include <polymorphic_allocator.h>
 #include <algorithm>
+#include <cassert>
 
 namespace pmr = cpp17::pmr;
 
@@ -84,7 +85,7 @@ private:
 };
 
 template <class Tp>
-inline void swap(slist<Tp>& a, slist<Tp>& b) { a->swap(b); }
+inline void swap(slist<Tp>& a, slist<Tp>& b) { a.swap(b); }
 
 template <class Tp>
 inline bool operator==(const slist<Tp>& a, const slist<Tp>& b) {
@@ -171,18 +172,19 @@ slist<Tp>::slist(allocator_type a)
 template <typename Tp>
 slist<Tp>::slist(const slist& other, allocator_type a)
   : slist(a) {
-  for (Tp& v : other)
+  for (const Tp& v : other)
     push_back(v);
 }
 
 template <typename Tp>
 slist<Tp>::slist(slist&& other)
-  : m_head(other.m_head.m_prev)
+  : m_head()
   , m_tail_p(other.m_tail_p)
   , m_size(other.m_size)
   , m_allocator(other.m_allocator)
 {
-  other.m_head.m_prev = nullptr;
+  m_head.m_next       = other.m_head.m_next;
+  other.m_head.m_next = nullptr;
   other.m_tail_p      = &other.m_head;
   other.m_size        = 0;
 }
@@ -206,15 +208,17 @@ template <typename Tp>
 slist<Tp>& slist<Tp>::operator=(const slist& other) {
   if (&other == this) return *this;
   erase(begin(), end());
-  for (Tp& v : other)
-    push_back(other);
+  for (const Tp& v : other)
+    push_back(v);
   return *this;
 }
 
 template <typename Tp>
 slist<Tp>& slist<Tp>::operator=(slist&& other) {
-  if (m_allocator == other.m_allocator)
+  if (m_allocator == other.m_allocator) {
+    erase(begin(), end());
     swap(other);
+  }
   else
     operator=(other);  // Copy assign
   return *this;
@@ -224,7 +228,7 @@ template <typename Tp>
 void slist<Tp>::swap(slist& other) {
   assert(m_allocator == other.m_allocator);
   using std::swap;
-  node_base *tmp = m_head.m_next;
+  node *tmp = m_head.m_next;
   m_head.m_next = other.m_head.m_next;
   other.m_head.m_next = tmp;
   swap(m_tail_p, other.m_tail_p);
@@ -265,7 +269,7 @@ slist<Tp>::erase(iterator b, iterator e) {
                                        sizeof(node), alignof(node));
   }
 
-  return ++b;
+  return b;
 }
 
 #endif // ! defined(INCLUDED_SLIST_DOT_H)
