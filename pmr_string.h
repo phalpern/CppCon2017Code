@@ -20,9 +20,10 @@ namespace pmr {
 // constructor and move constructor?  Assume yes unless we know that our
 // (otherwise C++11-compliant compiler) has a broken library.
 #if defined(__GNUC__)
-# if (__GNUC__ > 5)
-    // gcc 5.4 does not have a compliant string class library.  It is missing
-    // the copy-construct-with-allocator and move-constructor-with-allocator.
+# if (__GNUC__ > 6)
+    // gcc 6.3 and before does not have a compliant string class library.  It
+    // is missing the copy-construct-with-allocator and
+    // move-constructor-with-allocator.
 #   define CPP11_COMPLIANT_STRING 1
 # endif
 #else
@@ -41,7 +42,7 @@ namespace pmr {
 
 #else // if not C++11-compliant string library
 
-    // The string library in gcc 5.4 doesn't support extended copy and move
+    // The string library in gcc 6.3 doesn't support extended copy and move
     // constructors (i.e., `basic_string(const basic_string&, const
     // Allocator&)` and `basic_string(basic_string&&, const Allocator&)`, so
     // we have to fake it here in order to support scoped allocator

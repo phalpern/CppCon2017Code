@@ -538,336 +538,309 @@ int main(int argc, char *argv[])
 {
     using namespace cpp17::pmr;
 
-    int test = argc > 1 ? atoi(argv[1]) : 0;
-
-    std::cout << "TEST " << __FILE__;
-    if (test != 0)
-        std::cout << " CASE " << test << std::endl;
-    else
-        std::cout << " all cases" << std::endl;
-
 #define PMA cpp17::pmr::polymorphic_allocator
 
-    switch (test) { case 0: // Do all cases for test-case 0
-      case 1:
-      {
-        // --------------------------------------------------------------------
-        // BREATHING TEST
-        // --------------------------------------------------------------------
+    std::cout << "Testing new_delete_resource\n";
+    {
+        // Test new_delete_resource
+        int expBlocks = newDeleteCounters.blocks_outstanding();
+        int expBytes = newDeleteCounters.bytes_outstanding();
 
-        std::cout << "\nBREATHING TEST"
-                  << "\n==============" << std::endl;
+        memory_resource *r = new_delete_resource_singleton();
+        ASSERT(cpp17::pmr::get_default_resource() == r);
 
-        {
-            // Test new_delete_resource
-            int expBlocks = newDeleteCounters.blocks_outstanding();
-            int expBytes = newDeleteCounters.bytes_outstanding();
+        void *p = r->allocate(5, 1);
+        ++expBlocks;
+        expBytes += 5;
 
-            memory_resource *r = new_delete_resource_singleton();
-            ASSERT(cpp17::pmr::get_default_resource() == r);
+        ASSERT(p);
+        ASSERT(newDeleteCounters.blocks_outstanding() == expBlocks);
+        ASSERT(newDeleteCounters.bytes_outstanding() == expBytes);
 
-            void *p = r->allocate(5, 1);
-            ++expBlocks;
-            expBytes += 5;
+        r->deallocate(p, 5, 1);
+        ASSERT(newDeleteCounters.blocks_outstanding() == 0);
+        ASSERT(newDeleteCounters.bytes_outstanding() == 0);
+    }
 
-            ASSERT(p);
-            ASSERT(newDeleteCounters.blocks_outstanding() == expBlocks);
-            ASSERT(newDeleteCounters.bytes_outstanding() == expBytes);
+    cpp17::pmr::set_default_resource(&dfltTestRsrc);
+    ASSERT(cpp17::pmr::get_default_resource() == &dfltTestRsrc);
 
-            r->deallocate(p, 5, 1);
-            ASSERT(newDeleteCounters.blocks_outstanding() == 0);
-            ASSERT(newDeleteCounters.bytes_outstanding() == 0);
-        }
+    std::cout << "Testing polymorphic allocator constructors\n";
+    {
+        // Test construction with resource
+        TestResource ar;
+        const PMA<double> a1(&ar);
+        ASSERT(a1.resource() == &ar);
 
-        cpp17::pmr::set_default_resource(&dfltTestRsrc);
-        ASSERT(cpp17::pmr::get_default_resource() == &dfltTestRsrc);
+        // Test conversion constructor
+        PMA<char> a2(a1);
+        ASSERT(a2.resource() == &ar);
 
-        // Test polymorphic allocator constructors
-        {
-            // Test construction with resource
-            TestResource ar;
-            const PMA<double> a1(&ar);
-            ASSERT(a1.resource() == &ar);
+        // Test default construction
+        PMA<char> a3;
+        ASSERT(a3.resource() == &dfltTestRsrc);
 
-            // Test conversion constructor
-            PMA<char> a2(a1);
-            ASSERT(a2.resource() == &ar);
+        // Test construction with null pointer
+        PMA<char> a4(nullptr);
+        ASSERT(a4.resource() == &dfltTestRsrc);
 
-            // Test default construction
-            PMA<char> a3;
-            ASSERT(a3.resource() == &dfltTestRsrc);
+        // Test copy constructoin
+        PMA<char> a5(a2);
+        ASSERT(a5.resource() == &ar);
+    }
 
-            // Test construction with null pointer
-            PMA<char> a4(nullptr);
-            ASSERT(a4.resource() == &dfltTestRsrc);
+    TestResource x, y, z;
+    AllocCounters &xc = x.counters(), &yc = y.counters();
 
-            // Test copy constructoin
-            PMA<char> a5(a2);
-            ASSERT(a5.resource() == &ar);
-        }
+    newDeleteCounters.clear();
 
-        TestResource x, y, z;
-        AllocCounters &xc = x.counters(), &yc = y.counters();
+    std::cout << "Testing simple use of vector with polymorphic allocator\n";
+    {
+        typedef PMA<int> Alloc;
 
-        newDeleteCounters.clear();
+        SimpleVector<int, Alloc> vx(&x);
+        ASSERT(1 == xc.blocks_outstanding());
 
-        // Simple use of vector with polymorphic allocator
-        {
-            typedef PMA<int> Alloc;
-
-            SimpleVector<int, Alloc> vx(&x);
-            ASSERT(1 == xc.blocks_outstanding());
-
-            vx.push_back(3);
-            ASSERT(3 == vx.front());
-            ASSERT(1 == vx.size());
-            ASSERT(1 == xc.blocks_outstanding());
-            ASSERT(0 == dfltTestCounters.blocks_outstanding());
-            ASSERT(0 == newDeleteCounters.blocks_outstanding());
-        }
-        ASSERT(0 == xc.blocks_outstanding());
+        vx.push_back(3);
+        ASSERT(3 == vx.front());
+        ASSERT(1 == vx.size());
+        ASSERT(1 == xc.blocks_outstanding());
         ASSERT(0 == dfltTestCounters.blocks_outstanding());
         ASSERT(0 == newDeleteCounters.blocks_outstanding());
+    }
+    ASSERT(0 == xc.blocks_outstanding());
+    ASSERT(0 == dfltTestCounters.blocks_outstanding());
+    ASSERT(0 == newDeleteCounters.blocks_outstanding());
 
-        // Outer allocator is polymorphic, inner is not.
-        {
-            typedef SimpleString<SimpleAllocator<char> > String;
-            typedef PMA<String> Alloc;
+    std::cout << "Testing outer allocator is polymorphic, inner is not.\n";
+    {
+        typedef SimpleString<SimpleAllocator<char> > String;
+        typedef PMA<String> Alloc;
 
-            SimpleVector<String, Alloc> vx(&x);
-            ASSERT(1 == xc.blocks_outstanding());
-            ASSERT(0 == dfltSimpleCounters.blocks_outstanding());
-
-            vx.push_back("hello");
-            ASSERT(1 == vx.size());
-            ASSERT("hello" == vx.back());
-            ASSERT(1 == xc.blocks_outstanding());
-            ASSERT(1 == dfltSimpleCounters.blocks_outstanding());
-            vx.push_back("goodbye");
-            ASSERT(2 == vx.size());
-            ASSERT("hello" == vx.front());
-            ASSERT("goodbye" == vx.back());
-            ASSERT(1 == xc.blocks_outstanding());
-            ASSERT(2 == dfltSimpleCounters.blocks_outstanding());
-            ASSERT(SimpleAllocator<char>() == vx.front().get_allocator());
-
-            ASSERT(0 == newDeleteCounters.blocks_outstanding());
-        }
-        ASSERT(0 == xc.blocks_outstanding());
+        SimpleVector<String, Alloc> vx(&x);
+        ASSERT(1 == xc.blocks_outstanding());
         ASSERT(0 == dfltSimpleCounters.blocks_outstanding());
+
+        vx.push_back("hello");
+        ASSERT(1 == vx.size());
+        ASSERT("hello" == vx.back());
+        ASSERT(1 == xc.blocks_outstanding());
+        ASSERT(1 == dfltSimpleCounters.blocks_outstanding());
+        vx.push_back("goodbye");
+        ASSERT(2 == vx.size());
+        ASSERT("hello" == vx.front());
+        ASSERT("goodbye" == vx.back());
+        ASSERT(1 == xc.blocks_outstanding());
+        ASSERT(2 == dfltSimpleCounters.blocks_outstanding());
+        ASSERT(SimpleAllocator<char>() == vx.front().get_allocator());
+
         ASSERT(0 == newDeleteCounters.blocks_outstanding());
+    }
+    ASSERT(0 == xc.blocks_outstanding());
+    ASSERT(0 == dfltSimpleCounters.blocks_outstanding());
+    ASSERT(0 == newDeleteCounters.blocks_outstanding());
 
-        // Inner allocator is polymorphic, outer is not.
-        {
-            typedef SimpleString<PMA<char> > String;
-            typedef SimpleAllocator<String> Alloc;
+    std::cout << "Testing inner allocator is polymorphic, outer is not.\n";
+    {
+        typedef SimpleString<PMA<char> > String;
+        typedef SimpleAllocator<String> Alloc;
 
-            SimpleVector<String, Alloc> vx(&xc);
-            ASSERT(1 == xc.blocks_outstanding());
-            ASSERT(0 == dfltTestCounters.blocks_outstanding());
-            ASSERT(&xc == vx.get_allocator().counters())
+        SimpleVector<String, Alloc> vx(&xc);
+        ASSERT(1 == xc.blocks_outstanding());
+        ASSERT(0 == dfltTestCounters.blocks_outstanding());
+        ASSERT(&xc == vx.get_allocator().counters())
 
             vx.push_back("hello");
-            ASSERT(1 == vx.size());
-            ASSERT("hello" == vx.back());
-            ASSERT(1 == xc.blocks_outstanding());
-            ASSERT(1 == dfltTestCounters.blocks_outstanding());
-            vx.push_back("goodbye");
-            ASSERT(2 == vx.size());
-            ASSERT("hello" == vx.front());
-            ASSERT("goodbye" == vx.back());
-            ASSERT(1 == xc.blocks_outstanding());
-            ASSERT(2 == dfltTestCounters.blocks_outstanding());
-            ASSERT(&dfltTestRsrc == vx.front().get_allocator().resource());
+        ASSERT(1 == vx.size());
+        ASSERT("hello" == vx.back());
+        ASSERT(1 == xc.blocks_outstanding());
+        ASSERT(1 == dfltTestCounters.blocks_outstanding());
+        vx.push_back("goodbye");
+        ASSERT(2 == vx.size());
+        ASSERT("hello" == vx.front());
+        ASSERT("goodbye" == vx.back());
+        ASSERT(1 == xc.blocks_outstanding());
+        ASSERT(2 == dfltTestCounters.blocks_outstanding());
+        ASSERT(&dfltTestRsrc == vx.front().get_allocator().resource());
 
-            ASSERT(0 == newDeleteCounters.blocks_outstanding());
-        }
-        ASSERT(0 == xc.blocks_outstanding());
-        ASSERT(0 == dfltTestCounters.blocks_outstanding());
         ASSERT(0 == newDeleteCounters.blocks_outstanding());
+    }
+    ASSERT(0 == xc.blocks_outstanding());
+    ASSERT(0 == dfltTestCounters.blocks_outstanding());
+    ASSERT(0 == newDeleteCounters.blocks_outstanding());
 
-        // Both outer and inner allocators are polymorphic.
-        {
-            typedef SimpleString<PMA<char> > String;
-            typedef PMA<String> Alloc;
+    std::cout << "Testing both outer and inner allocators are polymorphic.\n";
+    {
+        typedef SimpleString<PMA<char> > String;
+        typedef PMA<String> Alloc;
 
-            SimpleVector<String, Alloc> vx(&x);
-            ASSERT(1 == xc.blocks_outstanding());
-            ASSERT(0 == dfltTestCounters.blocks_outstanding());
-
-            vx.push_back("hello");
-            ASSERT(1 == vx.size());
-            ASSERT("hello" == vx.back());
-            ASSERT(2 == xc.blocks_outstanding());
-            ASSERT(0 == dfltTestCounters.blocks_outstanding());
-            vx.push_back("goodbye");
-            ASSERT(2 == vx.size());
-            ASSERT("hello" == vx.front());
-            ASSERT("goodbye" == vx.back());
-            ASSERT(3 == xc.blocks_outstanding());
-            ASSERT(0 == dfltTestCounters.blocks_outstanding());
-            ASSERT(&x == vx.front().get_allocator().resource());
-
-            ASSERT(0 == newDeleteCounters.blocks_outstanding());
-        }
-        ASSERT(0 == xc.blocks_outstanding());
+        SimpleVector<String, Alloc> vx(&x);
+        ASSERT(1 == xc.blocks_outstanding());
         ASSERT(0 == dfltTestCounters.blocks_outstanding());
-        ASSERT(0 == newDeleteCounters.blocks_outstanding());
 
-        // Test container copy construction
-        {
-            typedef SimpleString<PMA<char> > String;
-            typedef PMA<String> Alloc;
-
-            SimpleVector<String, Alloc> vx(&x);
-            ASSERT(1 == xc.blocks_outstanding());
-
-            vx.push_back("hello");
-            vx.push_back("goodbye");
-            ASSERT(2 == vx.size());
-            ASSERT("hello" == vx.front());
-            ASSERT("goodbye" == vx.back());
-            ASSERT(3 == xc.blocks_outstanding());
-            ASSERT(0 == dfltTestCounters.blocks_outstanding());
-            ASSERT(&x == vx.front().get_allocator().resource());
-
-            SimpleVector<String, Alloc> vg(vx);
-            ASSERT(2 == vg.size());
-            ASSERT("hello" == vg.front());
-            ASSERT("goodbye" == vg.back());
-            ASSERT(3 == xc.blocks_outstanding());
-            ASSERT(3 == dfltTestCounters.blocks_outstanding());
-            ASSERT(&dfltTestRsrc == vg.front().get_allocator().resource());
-
-            SimpleVector<String, Alloc> vy(vx, &y);
-            ASSERT(2 == vy.size());
-            ASSERT("hello" == vy.front());
-            ASSERT("goodbye" == vy.back());
-            ASSERT(3 == xc.blocks_outstanding());
-            ASSERT(3 == yc.blocks_outstanding());
-            ASSERT(3 == dfltTestCounters.blocks_outstanding());
-            ASSERT(&y == vy.front().get_allocator().resource());
-
-            ASSERT(0 == newDeleteCounters.blocks_outstanding());
-        }
-        ASSERT(0 == xc.blocks_outstanding());
-        ASSERT(0 == yc.blocks_outstanding());
+        vx.push_back("hello");
+        ASSERT(1 == vx.size());
+        ASSERT("hello" == vx.back());
+        ASSERT(2 == xc.blocks_outstanding());
         ASSERT(0 == dfltTestCounters.blocks_outstanding());
+        vx.push_back("goodbye");
+        ASSERT(2 == vx.size());
+        ASSERT("hello" == vx.front());
+        ASSERT("goodbye" == vx.back());
+        ASSERT(3 == xc.blocks_outstanding());
+        ASSERT(0 == dfltTestCounters.blocks_outstanding());
+        ASSERT(&x == vx.front().get_allocator().resource());
+
         ASSERT(0 == newDeleteCounters.blocks_outstanding());
+    }
+    ASSERT(0 == xc.blocks_outstanding());
+    ASSERT(0 == dfltTestCounters.blocks_outstanding());
+    ASSERT(0 == newDeleteCounters.blocks_outstanding());
 
-        // Test resource_adaptor
-        {
-            typedef SimpleString<PMA<char> > String;
-            typedef SimpleVector<String, PMA<String> > strvec;
-            typedef SimpleVector<strvec, PMA<strvec> > strvecvec;
+    std::cout << "Testing container copy construction\n";
+    {
+        typedef SimpleString<PMA<char> > String;
+        typedef PMA<String> Alloc;
 
-            SimpleAllocator<char> sax(&xc);
-            SimpleAllocator<char> say(&yc);
-            resource_adaptor<SimpleAllocator<char>> crx(sax);
-            resource_adaptor<SimpleAllocator<char>> cry(say);
+        SimpleVector<String, Alloc> vx(&x);
+        ASSERT(1 == xc.blocks_outstanding());
 
-            strvec    a(&crx);
-            strvecvec b(&cry);
-            ASSERT(1 == xc.blocks_outstanding());
-            ASSERT(1 == yc.blocks_outstanding());
+        vx.push_back("hello");
+        vx.push_back("goodbye");
+        ASSERT(2 == vx.size());
+        ASSERT("hello" == vx.front());
+        ASSERT("goodbye" == vx.back());
+        ASSERT(3 == xc.blocks_outstanding());
+        ASSERT(0 == dfltTestCounters.blocks_outstanding());
+        ASSERT(&x == vx.front().get_allocator().resource());
 
-            ASSERT(0 == a.size());
-            a.push_back("hello");
-            ASSERT(1 == a.size());
-            ASSERT("hello" == a.front());
-            a.push_back("goodbye");
-            ASSERT(2 == a.size());
-            ASSERT("hello" == a.front());
-            ASSERT("goodbye" == a.back());
-            ASSERT(3 == xc.blocks_outstanding());
-            b.push_back(a);
-            ASSERT(1 == b.size());
-            ASSERT(2 == b.front().size());
-            ASSERT("hello" == b.front().front());
-            ASSERT("goodbye" == b.front().back());
-            ASSERT(3 == xc.blocks_outstanding());
-            LOOP_ASSERT(yc.blocks_outstanding(),
-                        4 == yc.blocks_outstanding());
+        SimpleVector<String, Alloc> vg(vx);
+        ASSERT(2 == vg.size());
+        ASSERT("hello" == vg.front());
+        ASSERT("goodbye" == vg.back());
+        ASSERT(3 == xc.blocks_outstanding());
+        ASSERT(3 == dfltTestCounters.blocks_outstanding());
+        ASSERT(&dfltTestRsrc == vg.front().get_allocator().resource());
 
-            b.emplace_back(3, "repeat");
-            ASSERT(2 == b.size());
-            ASSERT(3 == b.back().size());
-            ASSERT(3 == xc.blocks_outstanding());
-            LOOP_ASSERT(yc.blocks_outstanding(),
-                        8 == yc.blocks_outstanding());
+        SimpleVector<String, Alloc> vy(vx, &y);
+        ASSERT(2 == vy.size());
+        ASSERT("hello" == vy.front());
+        ASSERT("goodbye" == vy.back());
+        ASSERT(3 == xc.blocks_outstanding());
+        ASSERT(3 == yc.blocks_outstanding());
+        ASSERT(3 == dfltTestCounters.blocks_outstanding());
+        ASSERT(&y == vy.front().get_allocator().resource());
 
-            static const char* const exp[] = {
-                "hello", "goodbye", "repeat", "repeat", "repeat"
-            };
+        ASSERT(0 == newDeleteCounters.blocks_outstanding());
+    }
+    ASSERT(0 == xc.blocks_outstanding());
+    ASSERT(0 == yc.blocks_outstanding());
+    ASSERT(0 == dfltTestCounters.blocks_outstanding());
+    ASSERT(0 == newDeleteCounters.blocks_outstanding());
 
-            int e = 0;
-            for (strvecvec::iterator i = b.begin(); i != b.end(); ++i) {
-                ASSERT(i->get_allocator().resource() == &cry);
-                for (strvec::iterator j = i->begin(); j != i->end(); ++j) {
-                    ASSERT(j->get_allocator().resource() == &cry);
-                    ASSERT(*j == exp[e++]);
-                }
+    std::cout << "Testing resource_adaptor\n";
+    {
+        typedef SimpleString<PMA<char> > String;
+        typedef SimpleVector<String, PMA<String> > strvec;
+        typedef SimpleVector<strvec, PMA<strvec> > strvecvec;
+
+        SimpleAllocator<char> sax(&xc);
+        SimpleAllocator<char> say(&yc);
+        resource_adaptor<SimpleAllocator<char>> crx(sax);
+        resource_adaptor<SimpleAllocator<char>> cry(say);
+
+        strvec    a(&crx);
+        strvecvec b(&cry);
+        ASSERT(1 == xc.blocks_outstanding());
+        ASSERT(1 == yc.blocks_outstanding());
+
+        ASSERT(0 == a.size());
+        a.push_back("hello");
+        ASSERT(1 == a.size());
+        ASSERT("hello" == a.front());
+        a.push_back("goodbye");
+        ASSERT(2 == a.size());
+        ASSERT("hello" == a.front());
+        ASSERT("goodbye" == a.back());
+        ASSERT(3 == xc.blocks_outstanding());
+        b.push_back(a);
+        ASSERT(1 == b.size());
+        ASSERT(2 == b.front().size());
+        ASSERT("hello" == b.front().front());
+        ASSERT("goodbye" == b.front().back());
+        ASSERT(3 == xc.blocks_outstanding());
+        LOOP_ASSERT(yc.blocks_outstanding(),
+                    4 == yc.blocks_outstanding());
+
+        b.emplace_back(3, "repeat");
+        ASSERT(2 == b.size());
+        ASSERT(3 == b.back().size());
+        ASSERT(3 == xc.blocks_outstanding());
+        LOOP_ASSERT(yc.blocks_outstanding(),
+                    8 == yc.blocks_outstanding());
+
+        static const char* const exp[] = {
+            "hello", "goodbye", "repeat", "repeat", "repeat"
+        };
+
+        int e = 0;
+        for (strvecvec::iterator i = b.begin(); i != b.end(); ++i) {
+            ASSERT(i->get_allocator().resource() == &cry);
+            for (strvec::iterator j = i->begin(); j != i->end(); ++j) {
+                ASSERT(j->get_allocator().resource() == &cry);
+                ASSERT(*j == exp[e++]);
             }
         }
-        LOOP_ASSERT(xc.blocks_outstanding(),
-                    0 == xc.blocks_outstanding());
-        LOOP_ASSERT(yc.blocks_outstanding(),
-                    0 == yc.blocks_outstanding());
-        ASSERT(0 == dfltSimpleCounters.blocks_outstanding());
-        ASSERT(0 == newDeleteCounters.blocks_outstanding());
-
-        // Test construct() using pairs
-        {
-            typedef SimpleString<PMA<char> > String;
-            typedef std::pair<String, int> StrInt;
-            typedef PMA<StrInt> Alloc;
-
-            SimpleVector<StrInt, SimpleAllocator<StrInt> > vx(&xc);
-            SimpleVector<StrInt, Alloc> vy(&y);
-
-            vx.push_back(StrInt("hello", 5));
-            ASSERT(1 == vx.size());
-            ASSERT(1 == xc.blocks_outstanding());
-            ASSERT(1 == dfltTestCounters.blocks_outstanding());
-            ASSERT(&dfltTestRsrc==vx.front().first.get_allocator().resource());
-            ASSERT("hello" == vx.front().first);
-            ASSERT(5 == vx.front().second);
-            vy.push_back(StrInt("goodbye", 6));
-            ASSERT(1 == vy.size());
-            ASSERT(2 == yc.blocks_outstanding());
-            ASSERT(1 == dfltTestCounters.blocks_outstanding());
-            ASSERT(&y == vy.front().first.get_allocator().resource());
-            ASSERT("goodbye" == vy.front().first);
-            ASSERT(6 == vy.front().second);
-            vy.emplace_back("howdy", 9);
-            ASSERT(2 == vy.size());
-            ASSERT(3 == yc.blocks_outstanding());
-            ASSERT(&y == vy.back().first.get_allocator().resource());
-            ASSERT(1 == dfltTestCounters.blocks_outstanding());
-            ASSERT("goodbye" == vy[0].first);
-            ASSERT(6 == vy[0].second);
-            ASSERT("howdy" == vy[1].first);
-            ASSERT(9 == vy[1].second);
-        }
-        ASSERT(0 == xc.blocks_outstanding());
-        ASSERT(0 == yc.blocks_outstanding());
-        ASSERT(0 == dfltTestCounters.blocks_outstanding());
-        ASSERT(0 == dfltSimpleCounters.blocks_outstanding());
-        ASSERT(0 == newDeleteCounters.blocks_outstanding());
-
-        cpp17::pmr::set_default_resource(nullptr);
-        ASSERT(cpp17::pmr::new_delete_resource_singleton() ==
-               cpp17::pmr::get_default_resource());
-
-      } if (test != 0) break;
-
-      break;
-
-      default: {
-        std::cerr << "WARNING: CASE `" << test << "' NOT FOUND." << std::endl;
-        testStatus = -1;
-      }
     }
+    LOOP_ASSERT(xc.blocks_outstanding(),
+                0 == xc.blocks_outstanding());
+    LOOP_ASSERT(yc.blocks_outstanding(),
+                0 == yc.blocks_outstanding());
+    ASSERT(0 == dfltSimpleCounters.blocks_outstanding());
+    ASSERT(0 == newDeleteCounters.blocks_outstanding());
+
+    std::cout << "Testing construct() using pairs\n";
+    {
+        typedef SimpleString<PMA<char> > String;
+        typedef std::pair<String, int> StrInt;
+        typedef PMA<StrInt> Alloc;
+
+        SimpleVector<StrInt, SimpleAllocator<StrInt> > vx(&xc);
+        SimpleVector<StrInt, Alloc> vy(&y);
+
+        vx.push_back(StrInt("hello", 5));
+        ASSERT(1 == vx.size());
+        ASSERT(1 == xc.blocks_outstanding());
+        ASSERT(1 == dfltTestCounters.blocks_outstanding());
+        ASSERT(&dfltTestRsrc==vx.front().first.get_allocator().resource());
+        ASSERT("hello" == vx.front().first);
+        ASSERT(5 == vx.front().second);
+        vy.push_back(StrInt("goodbye", 6));
+        ASSERT(1 == vy.size());
+        ASSERT(2 == yc.blocks_outstanding());
+        ASSERT(1 == dfltTestCounters.blocks_outstanding());
+        ASSERT(&y == vy.front().first.get_allocator().resource());
+        ASSERT("goodbye" == vy.front().first);
+        ASSERT(6 == vy.front().second);
+        vy.emplace_back("howdy", 9);
+        ASSERT(2 == vy.size());
+        ASSERT(3 == yc.blocks_outstanding());
+        ASSERT(&y == vy.back().first.get_allocator().resource());
+        ASSERT(1 == dfltTestCounters.blocks_outstanding());
+        ASSERT("goodbye" == vy[0].first);
+        ASSERT(6 == vy[0].second);
+        ASSERT("howdy" == vy[1].first);
+        ASSERT(9 == vy[1].second);
+    }
+    ASSERT(0 == xc.blocks_outstanding());
+    ASSERT(0 == yc.blocks_outstanding());
+    ASSERT(0 == dfltTestCounters.blocks_outstanding());
+    ASSERT(0 == dfltSimpleCounters.blocks_outstanding());
+    ASSERT(0 == newDeleteCounters.blocks_outstanding());
+
+    cpp17::pmr::set_default_resource(nullptr);
+    ASSERT(cpp17::pmr::new_delete_resource_singleton() ==
+           cpp17::pmr::get_default_resource());
 
     if (testStatus > 0) {
         std::cerr << "Error, non-zero test status = " << testStatus << "."
