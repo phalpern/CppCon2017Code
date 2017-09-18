@@ -5,8 +5,8 @@
 
 TESTARGS +=
 
-CXX=g++ -std=c++11
-CXXFLAGS=-I. -Wall
+CXX ?= g++
+CXXFLAGS = -std=c++11 -I. -Wall
 WD := $(shell basename $(PWD))
 
 all : polymorphic_allocator.test test_resource.test slist.test

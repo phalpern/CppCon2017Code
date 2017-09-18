@@ -172,39 +172,40 @@ int main(int argc, char *argv[])
         ASSERT("1" == lst4.front());
         ASSERT(check(lst4, { "1", "10", "11" }, &tr));
 
+        static const char sixes[] = "six six six six 6 six six six six";
         auto i = ++lst4.begin();
         ASSERT("10" == *i);
-        *i++ = "6";
-        ASSERT(check(lst4, { "1", "6", "11" }));
+        *i++ = sixes;
+        ASSERT(check(lst4, { "1", sixes, "11" }));
         ASSERT("11" == *i);
 
         i = lst4.emplace(i, 1, '7');
         ASSERT("7" == *i);
-        ASSERT(check(lst4, { "1", "6", "7", "11" }));
+        ASSERT(check(lst4, { "1", sixes, "7", "11" }));
         ++i;
         i = lst4.emplace(i, "nine\n", 4);
         ASSERT("nine" == *i);
-        ASSERT(check(lst4, { "1", "6", "7", "nine", "11" }));
+        ASSERT(check(lst4, { "1", sixes, "7", "nine", "11" }));
         i = lst4.insert(i, pmr::string("8"));
-        ASSERT(check(lst4, { "1", "6", "7", "8", "nine", "11" }));
+        ASSERT(check(lst4, { "1", sixes, "7", "8", "nine", "11" }));
 
         std::cout << "Testing erase()\n";
         auto pre_erase_blks = tr.blocks_outstanding();
         i = lst4.erase(i, std::next(i, 2));
-        ASSERT(check(lst4, { "1", "6", "7", "11" }));
+        ASSERT(check(lst4, { "1", sixes, "7", "11" }));
         ASSERT(tr.blocks_outstanding() <= pre_erase_blks - 2);
         ASSERT("11" == *i);
         pre_erase_blks = tr.blocks_outstanding();
         i = lst4.erase(i);
-        ASSERT(check(lst4, { "1", "6", "7" }));
+        ASSERT(check(lst4, { "1", sixes, "7" }));
         ASSERT(tr.blocks_outstanding() < pre_erase_blks);
         ASSERT(lst4.end() == i);
         pre_erase_blks = tr.blocks_outstanding();
         i = lst4.erase(lst4.begin());
-        ASSERT(check(lst4, { "6", "7" }));
+        ASSERT(check(lst4, { sixes, "7" }));
         ASSERT(tr.blocks_outstanding() < pre_erase_blks);
         ASSERT(lst4.begin() == i);
-        ASSERT("6" == *i);
+        ASSERT(sixes == *i);
 
         std::cout << "Testing copy constructor and equality operators\n";
         {
@@ -212,15 +213,15 @@ int main(int argc, char *argv[])
             slist<pmr::string> lst5(lst4);
             ASSERT(lst5 == lst4);
             ASSERT(! (lst5 != lst4));
-            ASSERT(check(lst4, { "6", "7" }));
-            ASSERT(check(lst5, { "6", "7" }));
+            ASSERT(check(lst4, { sixes, "7" }));
+            ASSERT(check(lst5, { sixes, "7" }));
             ASSERT(tr.blocks_outstanding() == pre_copy_blks);
             ASSERT(lst5.get_allocator().resource() ==
                    pmr::new_delete_resource_singleton());
             lst5.push_back("12");
             ASSERT(lst5 != lst4);
-            ASSERT(check(lst4, { "6", "7" }));
-            ASSERT(check(lst5, { "6", "7", "12" }));
+            ASSERT(check(lst4, { sixes, "7" }));
+            ASSERT(check(lst5, { sixes, "7", "12" }));
         }
 
         std::cout << "Testing extended copy constructor\n";
@@ -230,14 +231,14 @@ int main(int argc, char *argv[])
             auto pre_copy_blks = tr.blocks_outstanding();
             slist<pmr::string> lst6(lst4, &tr2);
             ASSERT(lst6 == lst4);
-            ASSERT(check(lst4, { "6", "7" }));
-            ASSERT(check(lst6, { "6", "7" }));
+            ASSERT(check(lst4, { sixes, "7" }));
+            ASSERT(check(lst6, { sixes, "7" }));
             ASSERT(tr.blocks_outstanding() == pre_copy_blks);
             ASSERT(tr2.blocks_outstanding() == tr.blocks_outstanding());
             ASSERT(lst6.get_allocator() == ta2);
             lst6.front() = "5";
             ASSERT(lst6 != lst4);
-            ASSERT(check(lst4, { "6", "7" }));
+            ASSERT(check(lst4, { sixes, "7" }));
             ASSERT(check(lst6, { "5", "7" }));
         }
 
@@ -250,12 +251,12 @@ int main(int argc, char *argv[])
             slist<pmr::string> lst7(std::move(lst4b)); // Move from copy
             ASSERT(lst7 == lst4);
             ASSERT(lst4b.empty())
-            ASSERT(check(lst7, { "6", "7" }));
+            ASSERT(check(lst7, { sixes, "7" }));
             ASSERT(tr2.blocks_outstanding() == pre_move_blks); // no alloc/free
             ASSERT(lst7.get_allocator().resource() == &tr2)
             lst7.push_back("12");
             ASSERT(lst7 != lst4);
-            ASSERT(check(lst7, { "6", "7", "12" }));
+            ASSERT(check(lst7, { sixes, "7", "12" }));
         }
 
         std::cout << "Testing extended move constructor\n";
@@ -266,12 +267,12 @@ int main(int argc, char *argv[])
             slist<pmr::string> lst8(std::move(lst4b), &tr);
             ASSERT(lst8 == lst4);
             ASSERT(lst4b.empty())
-            ASSERT(check(lst8, { "6", "7" }));
+            ASSERT(check(lst8, { sixes, "7" }));
             ASSERT(tr.blocks_outstanding() == pre_move_blks); // no alloc/free
             ASSERT(lst8.get_allocator().resource() == &tr)
             lst8.push_back("12");
             ASSERT(lst8 != lst4);
-            ASSERT(check(lst8, { "6", "7", "12" }));
+            ASSERT(check(lst8, { sixes, "7", "12" }));
         }
         {
             test_resource tr2;
@@ -281,14 +282,14 @@ int main(int argc, char *argv[])
             auto pre_move_blks = tr.blocks_outstanding();
             slist<pmr::string> lst9(std::move(lst4), &tr2);
             ASSERT(lst9 == lst4);
-            ASSERT(check(lst4, { "6", "7" }));
-            ASSERT(check(lst9, { "6", "7" }));
+            ASSERT(check(lst4, { sixes, "7" }));
+            ASSERT(check(lst9, { sixes, "7" }));
             ASSERT(tr.blocks_outstanding() == pre_move_blks);
             ASSERT(tr2.blocks_outstanding() == tr.blocks_outstanding());
             ASSERT(lst9.get_allocator() == ta2);
             lst9.front() = "5";
             ASSERT(lst9 != lst4);
-            ASSERT(check(lst4, { "6", "7" }));
+            ASSERT(check(lst4, { sixes, "7" }));
             ASSERT(check(lst9, { "5", "7" }));
         }
 
@@ -299,13 +300,13 @@ int main(int argc, char *argv[])
             lst10.push_back("stuff");
             lst10 = lst4;
             ASSERT(lst10 == lst4);
-            ASSERT(check(lst4, { "6", "7" }));
-            ASSERT(check(lst10, { "6", "7" }));
+            ASSERT(check(lst4, { sixes, "7" }));
+            ASSERT(check(lst10, { sixes, "7" }));
             ASSERT(tr.blocks_outstanding() == 2 * pre_copy_blks);
             lst10.push_back("12");
             ASSERT(lst10 != lst4);
-            ASSERT(check(lst4, { "6", "7" }));
-            ASSERT(check(lst10, { "6", "7", "12" }));
+            ASSERT(check(lst4, { sixes, "7" }));
+            ASSERT(check(lst10, { sixes, "7", "12" }));
         }
 
         std::cout << "Testing move assignment\n";
@@ -320,11 +321,11 @@ int main(int argc, char *argv[])
             lst11 = std::move(lst4b);
             ASSERT(lst11 == lst4);
             ASSERT(lst4b.empty());
-            ASSERT(check(lst11, { "6", "7" }));
+            ASSERT(check(lst11, { sixes, "7" }));
             ASSERT(tr2.blocks_outstanding() == pre_move_blks); // no alloc/free
             lst11.push_back("12");
             ASSERT(lst11 != lst4);
-            ASSERT(check(lst11, { "6", "7", "12" }));
+            ASSERT(check(lst11, { sixes, "7", "12" }));
         }
         {
             test_resource tr2;
@@ -335,13 +336,13 @@ int main(int argc, char *argv[])
             lst12.push_front("stuff");
             lst12 = std::move(lst4);
             ASSERT(lst12 == lst4);
-            ASSERT(check(lst4, { "6", "7" }));
-            ASSERT(check(lst12, { "6", "7" }));
+            ASSERT(check(lst4, { sixes, "7" }));
+            ASSERT(check(lst12, { sixes, "7" }));
             ASSERT(tr.blocks_outstanding() == pre_move_blks);
             ASSERT(tr2.blocks_outstanding() == tr.blocks_outstanding());
             lst12.front() = "5";
             ASSERT(lst12 != lst4);
-            ASSERT(check(lst4, { "6", "7" }));
+            ASSERT(check(lst4, { sixes, "7" }));
             ASSERT(check(lst12, { "5", "7" }));
         }
 
@@ -356,7 +357,7 @@ int main(int argc, char *argv[])
             ASSERT(tr.blocks_outstanding() == pre_swap_blks);
             using namespace std;
             swap(lst4, lst13);
-            ASSERT(check(lst4, { "6", "7" }));
+            ASSERT(check(lst4, { sixes, "7" }));
             ASSERT(check(lst13, { "hello", "world" }));
             ASSERT(tr.blocks_outstanding() == pre_swap_blks);
         }

@@ -799,6 +799,9 @@ int main(int argc, char *argv[])
     ASSERT(0 == dfltSimpleCounters.blocks_outstanding());
     ASSERT(0 == newDeleteCounters.blocks_outstanding());
 
+// Older versions of gcc library don't support scoped_allocator construction
+// of pair.
+#if defined(__GNUC__) && (__GNUC__ > 4)
     std::cout << "Testing construct() using pairs\n";
     {
         typedef SimpleString<PMA<char> > String;
@@ -832,6 +835,7 @@ int main(int argc, char *argv[])
         ASSERT("howdy" == vy[1].first);
         ASSERT(9 == vy[1].second);
     }
+#endif
     ASSERT(0 == xc.blocks_outstanding());
     ASSERT(0 == yc.blocks_outstanding());
     ASSERT(0 == dfltTestCounters.blocks_outstanding());
