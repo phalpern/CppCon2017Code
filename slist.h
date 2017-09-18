@@ -15,6 +15,30 @@
 
 namespace pmr = cpp17::pmr;
 
+namespace slist_details {
+
+template <typename Tp> struct node;
+
+template <typename Tp>
+struct node_base {
+  node<Tp> *m_next;
+
+  node_base() : m_next(nullptr) { }
+  node_base(const node_base&) = delete;
+  node_base operator=(const node_base&) = delete;
+};
+
+template <typename Tp>
+struct node : node_base<Tp> {
+  union {
+    // By putting value into a union, constructor invocation is
+    // suppressed, leaving raw bytes that are correctly aligned.
+    Tp  m_value;
+  };
+};
+
+}
+
 // Singly-linked list that supports the use of a polymorphic
 // allocator.
 template <typename Tp>
@@ -69,14 +93,8 @@ public:
   allocator_type get_allocator() const { return m_allocator; }
 
 private:
-  struct node;
-  struct node_base {
-    node *m_next;
-
-    node_base() : m_next(nullptr) { }
-    node_base(const node_base&) = delete;
-    node_base operator=(const node_base&) = delete;
-  };
+  using node_base = slist_details::node_base<Tp>;
+  using node      = slist_details::node<Tp>;
 
   node_base       m_head;
   node_base      *m_tail_p;
@@ -101,15 +119,6 @@ inline bool operator!=(const slist<Tp>& a, const slist<Tp>& b) {
 }
 
 ///////////// Implementation ///////////////////
-
-template <typename Tp>
-struct slist<Tp>::node : slist<Tp>::node_base {
-  union {
-    // By putting value into a union, constructor invocation is
-    // suppressed, leaving raw bytes that are correctly aligned.
-    Tp  m_value;
-  };
-};
 
 template <typename Tp>
 class slist<Tp>::const_iterator {
