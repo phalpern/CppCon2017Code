@@ -15,6 +15,8 @@
 
 namespace pmr = cpp17::pmr;
 
+template <typename Tp> class slist;
+
 namespace slist_details {
 
 template <typename Tp> struct node;
@@ -37,7 +39,61 @@ struct node : node_base<Tp> {
   };
 };
 
-}
+template <typename Tp>
+class const_iterator {
+public:
+  using value_type        = Tp;
+  using pointer           = Tp const*;
+  using reference         = Tp const&;
+  using difference_type   = std::ptrdiff_t;
+  using iterator_category = std::forward_iterator_tag;
+
+  reference operator*()  const { return m_prev->m_next->m_value; }
+  pointer   operator->() const
+    { return std::addressof(m_prev->m_next->m_value); }
+
+  const_iterator& operator++()
+    { m_prev = m_prev->m_next; return *this;}
+  const_iterator  operator++(int)
+    { const_iterator tmp(*this); ++*this; return tmp; }
+
+  bool operator==(const_iterator other) const
+    { return m_prev == other.m_prev; }
+  bool operator!=(const_iterator other) const
+    { return ! operator==(other); }
+
+protected:
+  friend class slist<Tp>;
+
+  node_base<Tp> *m_prev;  // pointer to node before current element
+
+  explicit const_iterator(const node_base<Tp> *prev)
+    : m_prev(const_cast<node_base<Tp>*>(prev)) { }
+};
+
+template <typename Tp>
+class iterator : public const_iterator<Tp> {
+  using Base = const_iterator<Tp>;
+
+public:
+  using pointer           = Tp*;
+  using reference         = Tp&;
+
+  reference operator*()  const
+    { return this->m_prev->m_next->m_value; }
+  pointer   operator->() const
+    { return std::addressof(this->m_prev->m_next->m_value); }
+
+  iterator& operator++() { Base::operator++(); return *this; }
+  iterator  operator++(int)
+    { iterator tmp(*this); ++*this; return tmp; }
+
+private:
+  friend class slist<Tp>;
+  explicit iterator(node_base<Tp> *prev) : const_iterator<Tp>(prev) { }
+};
+
+} // close namespace slist_details
 
 // Singly-linked list that supports the use of a polymorphic
 // allocator.
@@ -47,8 +103,8 @@ class slist {
 public:
   using value_type     = Tp;
   using allocator_type = pmr::polymorphic_allocator<byte>;
-  class iterator;
-  class const_iterator;
+  using iterator       = slist_details::iterator<Tp>;
+  using const_iterator = slist_details::const_iterator<Tp>;
 
   slist(allocator_type a = {});
   slist(const slist& other, allocator_type a = {});
@@ -119,60 +175,6 @@ inline bool operator!=(const slist<Tp>& a, const slist<Tp>& b) {
 }
 
 ///////////// Implementation ///////////////////
-
-template <typename Tp>
-class slist<Tp>::const_iterator {
-public:
-  using value_type        = Tp;
-  using pointer           = Tp const*;
-  using reference         = Tp const&;
-  using difference_type   = std::ptrdiff_t;
-  using iterator_category = std::forward_iterator_tag;
-
-  reference operator*()  const { return m_prev->m_next->m_value; }
-  pointer   operator->() const
-    { return std::addressof(m_prev->m_next->m_value); }
-
-  const_iterator& operator++()
-    { m_prev = m_prev->m_next; return *this;}
-  const_iterator  operator++(int)
-    { const_iterator tmp(*this); ++*this; return tmp; }
-
-  bool operator==(const_iterator other) const
-    { return m_prev == other.m_prev; }
-  bool operator!=(const_iterator other) const
-    { return ! operator==(other); }
-
-protected:
-  friend class slist<Tp>;
-
-  node_base *m_prev;  // pointer to node before current element
-
-  explicit const_iterator(const node_base *prev)
-    : m_prev(const_cast<node_base*>(prev)) { }
-};
-
-template <typename Tp>
-class slist<Tp>::iterator : public slist<Tp>::const_iterator {
-  using Base = slist<Tp>::const_iterator;
-
-public:
-  using pointer           = Tp*;
-  using reference         = Tp&;
-
-  reference operator*()  const
-    { return this->m_prev->m_next->m_value; }
-  pointer   operator->() const
-    { return std::addressof(this->m_prev->m_next->m_value); }
-
-  iterator& operator++() { Base::operator++(); return *this; }
-  iterator  operator++(int)
-    { iterator tmp(*this); ++*this; return tmp; }
-
-private:
-  friend class slist<Tp>;
-  explicit iterator(node_base *prev) : const_iterator(prev) { }
-};
 
 template <typename Tp>
 slist<Tp>::slist(allocator_type a)
