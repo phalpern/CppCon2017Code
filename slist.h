@@ -204,10 +204,7 @@ template <typename Tp>
 slist<Tp>::slist(slist&& other, allocator_type a)
   : slist(a)
 {
-  if (a == m_allocator)
-    operator=(std::move(other));
-  else
-    operator=(other);
+  operator=(std::move(other));
 }
 
 template <typename Tp>

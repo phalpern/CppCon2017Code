@@ -118,7 +118,7 @@ int main(int argc, char *argv[])
         tr1.deallocate(&dummy, sizeof(int), sizeof(int));
         ASSERT(false && "unreachable");
     } catch (std::invalid_argument& ex) {
-        const char *experr = "Invalid pointer passed to deallocate()";
+        const char *experr = "deallocate: Invalid pointer";
         LOOP_ASSERT(ex.what(), 0 == strcmp(experr, ex.what()));
     }
 
@@ -127,7 +127,7 @@ int main(int argc, char *argv[])
         tr1.deallocate(p2, 32, 2);
         ASSERT(false && "unreachable");
     } catch (std::invalid_argument& ex) {
-        const char *experr = "Block-size mismatch on deallocate()";
+        const char *experr = "deallocate: Size mismatch";
         LOOP_ASSERT(ex.what(), 0 == strcmp(experr, ex.what()));
     }
 
@@ -136,7 +136,7 @@ int main(int argc, char *argv[])
         tr1.deallocate(p2, 64, 4);
         ASSERT(false && "unreachable");
     } catch (std::invalid_argument& ex) {
-        const char *experr = "Alignment mismatch on deallocate()";
+        const char *experr = "deallocate: Alignment mismatch";
         LOOP_ASSERT(ex.what(), 0 == strcmp(experr, ex.what()));
     }
 

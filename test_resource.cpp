@@ -91,16 +91,16 @@ void *test_resource::do_allocate(size_t bytes,
 
 void test_resource::do_deallocate(void *p, size_t bytes,
                                   size_t alignment) {
-
-  // Check that deallocation arguments exactly match allocation arguments.
+  // Check that deallocation args exactly match allocation args.
   auto i = std::find_if(m_blocks.begin(), m_blocks.end(),
-                        [p](allocation_rec& r){ return r.m_ptr == p; });
+                        [p](allocation_rec& r){
+                          return r.m_ptr == p; });
   if (i == m_blocks.end())
-    throw std::invalid_argument("Invalid pointer passed to deallocate()");
+    throw std::invalid_argument("deallocate: Invalid pointer");
   else if (i->m_bytes != bytes)
-    throw std::invalid_argument("Block-size mismatch on deallocate()");
+    throw std::invalid_argument("deallocate: Size mismatch");
   else if (i->m_alignment != alignment)
-    throw std::invalid_argument("Alignment mismatch on deallocate()");
+    throw std::invalid_argument("deallocate: Alignment mismatch");
 
   m_parent->deallocate(p, i->m_bytes, i->m_alignment);
   m_blocks.erase(i);
