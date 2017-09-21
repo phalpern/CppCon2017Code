@@ -101,12 +101,17 @@ template <typename Tp>
 class slist {
   using byte = cpp17::byte;
 public:
-  using value_type     = Tp;
-  using allocator_type = pmr::polymorphic_allocator<byte>;
-  using iterator       = slist_details::iterator<Tp>;
-  using const_iterator = slist_details::const_iterator<Tp>;
+  using value_type      = Tp;
+  using reference       = value_type&;
+  using const_reference = value_type const&;
+  using difference_type = std::ptrdiff_t;
+  using size_type       = std::size_t;
+  using allocator_type  = pmr::polymorphic_allocator<byte>;
+  using iterator        = slist_details::iterator<Tp>;
+  using const_iterator  = slist_details::const_iterator<Tp>;
 
-  slist(allocator_type a = {});
+  slist(allocator_type a = {})
+    : m_head(), m_tail_p(&m_head), m_size(0), m_allocator(a) { }
   slist(const slist& other, allocator_type a = {});
   slist(slist&& other);
   slist(slist&& other, allocator_type a);
@@ -114,10 +119,10 @@ public:
 
   slist& operator=(const slist& other);
   slist& operator=(slist&& other);
-  void swap(slist& other);
+  void swap(slist& other) noexcept;
 
-  size_t size() const { return m_size; }
-  bool   empty() const { return 0 == m_size; }
+  size_t size() const noexcept { return m_size; }
+  bool   empty() const noexcept { return 0 == m_size; }
 
   iterator begin()              { return iterator(&m_head); }
   iterator end()                { return iterator(m_tail_p); }
@@ -159,7 +164,7 @@ private:
 };
 
 template <class Tp>
-inline void swap(slist<Tp>& a, slist<Tp>& b) { a.swap(b); }
+inline void swap(slist<Tp>& a, slist<Tp>& b) noexcept { a.swap(b); }
 
 template <class Tp>
 inline bool operator==(const slist<Tp>& a, const slist<Tp>& b) {
@@ -177,33 +182,20 @@ inline bool operator!=(const slist<Tp>& a, const slist<Tp>& b) {
 ///////////// Implementation ///////////////////
 
 template <typename Tp>
-slist<Tp>::slist(allocator_type a)
-  : m_head(), m_tail_p(&m_head), m_size(0), m_allocator(a) { }
-
-template <typename Tp>
 slist<Tp>::slist(const slist& other, allocator_type a)
   : slist(a) {
-  for (const Tp& v : other)
-    push_back(v);
+  operator=(other);
 }
 
 template <typename Tp>
 slist<Tp>::slist(slist&& other)
-  : m_head()
-  , m_tail_p(other.m_tail_p)
-  , m_size(other.m_size)
-  , m_allocator(other.m_allocator)
-{
-  m_head.m_next       = other.m_head.m_next;
-  other.m_head.m_next = nullptr;
-  other.m_tail_p      = &other.m_head;
-  other.m_size        = 0;
+  : slist(other.get_allocator()) {
+  operator=(std::move(other));
 }
 
 template <typename Tp>
 slist<Tp>::slist(slist&& other, allocator_type a)
-  : slist(a)
-{
+  : slist(a) {
   operator=(std::move(other));
 }
 
@@ -223,6 +215,7 @@ slist<Tp>& slist<Tp>::operator=(const slist& other) {
 
 template <typename Tp>
 slist<Tp>& slist<Tp>::operator=(slist&& other) {
+  if (&other == this) return *this;
   if (m_allocator == other.m_allocator) {
     erase(begin(), end());
     swap(other);
@@ -233,14 +226,14 @@ slist<Tp>& slist<Tp>::operator=(slist&& other) {
 }
 
 template <typename Tp>
-void slist<Tp>::swap(slist& other) {
+void slist<Tp>::swap(slist& other) noexcept {
   assert(m_allocator == other.m_allocator);
-  using std::swap;
-  node *tmp = m_head.m_next;
-  m_head.m_next = other.m_head.m_next;
-  other.m_head.m_next = tmp;
-  swap(m_tail_p, other.m_tail_p);
-  swap(m_size, other.m_size);
+  node_base *new_tail = other.empty() ? &m_head : other.m_tail_p;
+  node_base *new_other_tail = empty() ? &other.m_head : m_tail_p;
+  std::swap(m_head.m_next, other.m_head.m_next);
+  std::swap(m_size, other.m_size);
+  m_tail_p = new_tail;
+  other.m_tail_p = new_other_tail;
 }
 
 template <typename Tp>

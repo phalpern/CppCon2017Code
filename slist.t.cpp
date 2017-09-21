@@ -361,6 +361,16 @@ int main(int argc, char *argv[])
             ASSERT(check(lst13, { "hello", "world" }));
             ASSERT(tr.blocks_outstanding() == pre_swap_blks);
         }
+
+        std::cout << "Testing usage example\n";
+        {
+            test_resource tr;
+            slist<pmr::string> lst(&tr);
+            pmr::string hello = "Say hello to my friends at the university";
+            ASSERT(0 == tr.bytes_allocated());  // No use of tr yet
+            lst.push_back(hello);
+            ASSERT(2 == tr.blocks_outstanding()); // 2 blocks allocated
+        }
     }
     ASSERT(0 == tr.blocks_outstanding());  // No leaks
 
