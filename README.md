@@ -22,25 +22,25 @@ the non-template and non-inline parts of the implementation, and a
 `.t.cpp` file containing a test driver for the component. The components
 in this repository are:
 
- * `polymorphic_allocator`: An implementation of `cpp17::pmr::memory_resource`
+ * **polymorphic_allocator**: An implementation of `cpp17::pmr::memory_resource`
    and `cpp17::pmr::polymorphic_allocator<Tp>` from C++17, using only C++11
    language and library features.
 
- * `pmr_vector` (header only): An implementation of
-   `pmr::vector<Tp>` from C++17, which is the same as
+ * **pmr_vector** (header only): An implementation of
+   `cpp17::pmr::vector<Tp>` from C++17, which is the same as
    `std::vector<Tp, cpp17::pmr::polymoprhic_allocator<Tp>>`.
 
- * `pmr_string` (header only): An implementation of
+ * **pmr_string** (header only): An implementation of
    `cpp17::pmr::basic_string<charT, Traits>`, from C++17, which is the
    same as `std::basic_string<charT, Traits,
    cpp17::pmr::polymorpic_allocator<charT>>`, This component also
    contains the aliases `cpp17::pmr::string` and `cpp17::pmr::wstring`.
 
- * `test_resource`: A memory resource for testing purposes that
+ * **test_resource**: A memory resource for testing purposes that
    maintains statistics on memory usage and checks for mismatched
    deallocations and memory leaks. A subset of this component is
    explicated in my talk.
 
- * `slist`: An implementation of a forward list that uses only the good
+ * **slist**: An implementation of a forward list that uses only the good
    parts of the C++17 allocator model. A subset of this component is
    explicated in my talk.
