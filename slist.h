@@ -242,8 +242,16 @@ typename slist<Tp>::iterator
 slist<Tp>::emplace(iterator i, Args&&... args) {
   node* new_node = static_cast<node*>(
     m_allocator.resource()->allocate(sizeof(node), alignof(node)));
-  m_allocator.construct(std::addressof(new_node->m_value),
-                        std::forward<Args>(args)...);
+  try {
+    m_allocator.construct(std::addressof(new_node->m_value),
+                          std::forward<Args>(args)...);
+  }
+  catch (...) {
+    // Recover resources if exception on constructor call.
+    m_allocator.resource()->deallocate(new_node,
+                                       sizeof(node), alignof(node));
+    throw;
+  }
 
   new_node->m_next = i.m_prev->m_next;
   i.m_prev->m_next = new_node;
