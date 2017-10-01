@@ -7,6 +7,11 @@ This repository contains all of the code presented in my talk at CppCon
 2017, including an implementation of `polymorphic_allocators`, a C++17
 feature implemented here using only C++11 features.
 
+Also included is the PDF of my PowerPoint presentation.
+
+Look for a video of my presentation, coming soon to the CppCon Channel of
+YouTube.
+
 Components and namespaces
 -------------------------
 
